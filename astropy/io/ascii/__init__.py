@@ -3,7 +3,6 @@
 
 """
 
-from __future__ import absolute_import, division, print_function
 
 from .core import (InconsistentTableError,
                    ParameterError,
@@ -40,6 +39,7 @@ from .sextractor import SExtractor
 from .fixedwidth import (FixedWidth, FixedWidthNoHeader,
                          FixedWidthTwoLine, FixedWidthSplitter,
                          FixedWidthHeader, FixedWidthData)
+from .rst import RST
 from .ui import (set_guess, get_reader, read, get_writer, write, get_read_trace)
 
 from . import connect

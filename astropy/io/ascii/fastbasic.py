@@ -1,15 +1,16 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-from . import core
-from ...extern import six
-from ...table import Table
-from . import cparser
-from ...extern.six.moves import zip as izip
-from ...utils import OrderedDict
 import re
+import copy
+from collections import OrderedDict
 
-@six.add_metaclass(core.MetaBaseReader)
-class FastBasic(object):
+from . import core
+from astropy.table import Table
+from . import cparser
+from astropy.utils import set_locale
+
+
+class FastBasic(metaclass=core.MetaBaseReader):
     """
     This class is intended to handle the same format addressed by the
     ordinary :class:`Basic` writer, but it acts as a wrapper for underlying C
@@ -32,8 +33,13 @@ class FastBasic(object):
                 user_kwargs.get('header_start', 0) is None):
             raise ValueError('header_start cannot be set to None for this Reader')
 
-        kwargs = default_kwargs.copy()
-        kwargs.update(user_kwargs) # user kwargs take precedence over defaults
+        # Set up kwargs and copy any user kwargs.  Use deepcopy user kwargs
+        # since they may contain a dict item which would end up as a ref to the
+        # original and get munged later (e.g. in cparser.pyx validation of
+        # fast_reader dict).
+        kwargs = copy.deepcopy(default_kwargs)
+        kwargs.update(copy.deepcopy(user_kwargs))
+
         delimiter = kwargs.pop('delimiter', ' ')
         self.delimiter = str(delimiter) if delimiter is not None else None
         self.write_comment = kwargs.get('comment', '# ')
@@ -78,6 +84,8 @@ class FastBasic(object):
         elif 'converters' in self.kwargs:
             raise core.ParameterError("The C reader does not support passing "
                                       "specialized converters")
+        elif 'encoding' in self.kwargs:
+            raise core.ParameterError("The C reader does not use the encoding parameter")
         elif 'Outputter' in self.kwargs:
             raise core.ParameterError("The C reader does not use the Outputter parameter")
         elif 'Inputter' in self.kwargs:
@@ -86,6 +94,17 @@ class FastBasic(object):
             raise core.ParameterError("The C reader does not use a Splitter class")
 
         self.strict_names = self.kwargs.pop('strict_names', False)
+
+        # Process fast_reader kwarg, which may or may not exist (though ui.py will always
+        # pass this as a dict with at least 'enable' set).
+        fast_reader = self.kwargs.get('fast_reader', True)
+        if not isinstance(fast_reader, dict):
+            fast_reader = {}
+
+        fast_reader.pop('enable', None)
+        self.return_header_chars = fast_reader.pop('return_header_chars', False)
+        # Put fast_reader dict back into kwargs.
+        self.kwargs['fast_reader'] = fast_reader
 
         self.engine = cparser.CParser(table, self.strip_whitespace_lines,
                                       self.strip_whitespace_fields,
@@ -105,7 +124,17 @@ class FastBasic(object):
             try_float = {}
             try_string = {}
 
-        data, comments = self.engine.read(try_int, try_float, try_string)
+        with set_locale('C'):
+            data, comments = self.engine.read(try_int, try_float, try_string)
+        out = self.make_table(data, comments)
+
+        if self.return_header_chars:
+            out.meta['__ascii_fast_reader_header_chars__'] = self.engine.header_chars
+
+        return out
+
+    def make_table(self, data, comments):
+        """Actually make the output table give the data and comments."""
         meta = OrderedDict()
         if comments:
             meta['comments'] = comments
@@ -121,11 +150,12 @@ class FastBasic(object):
                     len(name) == 0 or
                     name[0] in bads or
                     name[-1] in bads):
-                    raise ValueError('Column name {0!r} does not meet strict name requirements'
+                    raise ValueError('Column name {!r} does not meet strict name requirements'
                                      .format(name))
         # When guessing require at least two columns
         if self.guessing and len(names) <= 1:
-            raise ValueError('Strict name guessing requires at least two columns')
+            raise ValueError('Table format guessing requires at least two columns, got {}'
+                             .format(names))
 
     def write(self, table, output):
         """
@@ -148,6 +178,7 @@ class FastBasic(object):
         writer = cparser.FastWriter(table, **write_kwargs)
         writer.write(output, header_output, output_types)
 
+
 class FastCsv(FastBasic):
     """
     A faster version of the ordinary :class:`Csv` writer that uses the
@@ -161,14 +192,15 @@ class FastCsv(FastBasic):
     fill_extra_cols = True
 
     def __init__(self, **kwargs):
-        super(FastCsv, self).__init__({'delimiter': ',', 'comment': None}, **kwargs)
+        super().__init__({'delimiter': ',', 'comment': None}, **kwargs)
 
     def write(self, table, output):
         """
         Override the default write method of `FastBasic` to
         output masked values as empty fields.
         """
-        self._write(table, output, { 'fill_values': [(core.masked, '')] })
+        self._write(table, output, {'fill_values': [(core.masked, '')]})
+
 
 class FastTab(FastBasic):
     """
@@ -180,22 +212,23 @@ class FastTab(FastBasic):
     _fast = True
 
     def __init__(self, **kwargs):
-        super(FastTab, self).__init__({'delimiter': '\t'}, **kwargs)
+        super().__init__({'delimiter': '\t'}, **kwargs)
         self.strip_whitespace_lines = False
         self.strip_whitespace_fields = False
+
 
 class FastNoHeader(FastBasic):
     """
     This class uses the fast C engine to read tables with no header line. If
     the names parameter is unspecified, the columns will be autonamed with
-    "col%d".
+    "col{}".
     """
     _format_name = 'fast_no_header'
     _description = 'Basic table with no headers using the fast C engine'
     _fast = True
 
     def __init__(self, **kwargs):
-        super(FastNoHeader, self).__init__({'header_start': None, 'data_start': 0}, **kwargs)
+        super().__init__({'header_start': None, 'data_start': 0}, **kwargs)
 
     def write(self, table, output):
         """
@@ -203,6 +236,7 @@ class FastNoHeader(FastBasic):
         that columns names are not included in output.
         """
         self._write(table, output, {}, header_output=None)
+
 
 class FastCommentedHeader(FastBasic):
     """
@@ -215,27 +249,28 @@ class FastCommentedHeader(FastBasic):
     _fast = True
 
     def __init__(self, **kwargs):
-        super(FastCommentedHeader, self).__init__({}, **kwargs)
+        super().__init__({}, **kwargs)
         # Mimic CommentedHeader's behavior in which data_start
         # is relative to header_start if unspecified; see #2692
         if 'data_start' not in kwargs:
             self.data_start = 0
 
-    def read(self, table):
+    def make_table(self, data, comments):
         """
-        Read input data (file-like object, filename, list of strings, or
-        single string) into a Table and return the result.
+        Actually make the output table give the data and comments.  This is
+        slightly different from the base FastBasic method in the way comments
+        are handled.
         """
-        out = super(FastCommentedHeader, self).read(table)
+        meta = OrderedDict()
+        if comments:
+            idx = self.header_start
+            if idx < 0:
+                idx = len(comments) + idx
+            meta['comments'] = comments[:idx] + comments[idx+1:]
+            if not meta['comments']:
+                del meta['comments']
 
-        # Strip off first comment since this is the header line for
-        # commented_header format.
-        if 'comments' in out.meta:
-            out.meta['comments'] = out.meta['comments'][1:]
-            if not out.meta['comments']:
-                del out.meta['comments']
-
-        return out
+        return Table(data, names=list(self.engine.get_names()), meta=meta)
 
     def _read_header(self):
         tmp = self.engine.source
@@ -243,7 +278,7 @@ class FastCommentedHeader(FastBasic):
 
         for line in tmp.splitlines():
             line = line.lstrip()
-            if line and line[0] == self.comment: # line begins with a comment
+            if line and line[0] == self.comment:  # line begins with a comment
                 commented_lines.append(line[1:])
                 if len(commented_lines) == self.header_start + 1:
                     break
@@ -263,6 +298,7 @@ class FastCommentedHeader(FastBasic):
         """
         self._write(table, output, {}, header_output='comment')
 
+
 class FastRdb(FastBasic):
     """
     A faster version of the :class:`Rdb` reader. This format is similar to
@@ -274,7 +310,7 @@ class FastRdb(FastBasic):
     _fast = True
 
     def __init__(self, **kwargs):
-        super(FastRdb, self).__init__({'delimiter': '\t', 'data_start': 2}, **kwargs)
+        super().__init__({'delimiter': '\t', 'data_start': 2}, **kwargs)
         self.strip_whitespace_lines = False
         self.strip_whitespace_fields = False
 
@@ -289,7 +325,7 @@ class FastRdb(FastBasic):
             elif not line2 and line.strip() and line.lstrip()[0] != self.comment:
                 line2 = line
                 break
-        else: # less than 2 lines in table
+        else:  # less than 2 lines in table
             raise ValueError('RDB header requires 2 lines')
 
         # tokenize the two header lines separately
@@ -302,18 +338,18 @@ class FastRdb(FastBasic):
         self.engine.read_header()
 
         if len(self.engine.get_names()) != len(types):
-            raise ValueError('RDB header mismatch between number of '
+            raise core.InconsistentTableError('RDB header mismatch between number of '
                              'column names and column types')
 
         if any(not re.match(r'\d*(N|S)$', x, re.IGNORECASE) for x in types):
-            raise ValueError('RDB type definitions do not all match '
-                             '[num](N|S): {0}'.format(types))
+            raise core.InconsistentTableError('RDB type definitions do not all match '
+                             '[num](N|S): {}'.format(types))
 
         try_int = {}
         try_float = {}
         try_string = {}
 
-        for name, col_type in izip(self.engine.get_names(), types):
+        for name, col_type in zip(self.engine.get_names(), types):
             if col_type[-1].lower() == 's':
                 try_int[name] = 0
                 try_float[name] = 0

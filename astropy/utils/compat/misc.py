@@ -4,24 +4,15 @@ Simple utility functions and bug fixes for compatibility with all supported
 versions of Python.  This module should generally not be used directly, as
 everything in `__all__` will be imported into `astropy.utils.compat` and can
 be accessed from there.
-
-Includes the following fixes:
-
-* The `contextlib.ignored` context manager, which is only available in Python
-  3.4 or greater.
-
 """
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-from ...extern import six
-
-import functools
 import sys
+import functools
+from contextlib import suppress
 
 
-__all__ = ['invalidate_caches', 'override__dir__', 'ignored',
-           'possible_filename']
+__all__ = ['override__dir__', 'suppress',
+           'possible_filename', 'namedtuple_asdict']
 
 
 def possible_filename(filename):
@@ -33,26 +24,15 @@ def possible_filename(filename):
     may be removed outright in the future).
 
     Therefore this returns `True` in all cases except for `bytes` strings in
-    Windows on Python >= 3.3.
+    Windows.
     """
 
-    if isinstance(filename, six.text_type):
+    if isinstance(filename, str):
         return True
-    elif isinstance(filename, six.binary_type):
-        return not (sys.platform == 'win32' and
-                    sys.version_info[:2] >= (3, 3))
+    elif isinstance(filename, bytes):
+        return not (sys.platform == 'win32')
 
     return False
-
-
-# Python 3.3's importlib caches filesystem reads for faster imports in the
-# general case. But sometimes it's necessary to manually invalidate those
-# caches so that the import system can pick up new generated files.  See
-# https://github.com/astropy/astropy/issues/820
-if sys.version_info[:2] >= (3, 3):
-    from importlib import invalidate_caches
-else:
-    invalidate_caches = lambda: None
 
 
 def override__dir__(f):
@@ -70,51 +50,24 @@ def override__dir__(f):
     def __dir__(self):
         return ['special_method1', 'special_method2']
     """
-    if sys.version_info[:2] < (3, 3):
-        # There was no straightforward way to do this until Python 3.3, so
-        # we have this complex monstrosity
-        @functools.wraps(f)
-        def override__dir__wrapper(self):
-            members = set()
-            for cls in self.__class__.mro():
-                members.update(dir(cls))
-            members.update(six.iterkeys(self.__dict__))
-            members.update(f(self))
-            return sorted(members)
-    else:
-        # http://bugs.python.org/issue12166
+    # http://bugs.python.org/issue12166
 
-        @functools.wraps(f)
-        def override__dir__wrapper(self):
-            members = set(object.__dir__(self))
-            members.update(f(self))
-            return sorted(members)
+    @functools.wraps(f)
+    def override__dir__wrapper(self):
+        members = set(object.__dir__(self))
+        members.update(f(self))
+        return sorted(members)
 
     return override__dir__wrapper
 
 
-try:
-    from contextlib import ignored
-except ImportError:
-    from contextlib import contextmanager
-    @contextmanager
-    def ignored(*exceptions):
-        """A context manager for ignoring exceptions.  Equivalent to::
+def namedtuple_asdict(namedtuple):
+    """
+    The same as ``namedtuple._adict()``.
 
-            try:
-                <body>
-            except exceptions:
-                pass
-
-        Example::
-
-            >>> import os
-            >>> with ignored(OSError):
-            ...     os.remove('file-that-does-not-exist')
-
-        """
-
-        try:
-            yield
-        except exceptions:
-            pass
+    Parameters
+    ----------
+    namedtuple : collections.namedtuple
+    The named tuple to get the dict of
+    """
+    return namedtuple._asdict()

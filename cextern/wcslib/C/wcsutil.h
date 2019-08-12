@@ -1,7 +1,7 @@
 /*============================================================================
 
-  WCSLIB 5.10 - an implementation of the FITS WCS standard.
-  Copyright (C) 1995-2015, Mark Calabretta
+  WCSLIB 6.2 - an implementation of the FITS WCS standard.
+  Copyright (C) 1995-2018, Mark Calabretta
 
   This file is part of WCSLIB.
 
@@ -22,10 +22,10 @@
 
   Author: Mark Calabretta, Australia Telescope National Facility, CSIRO.
   http://www.atnf.csiro.au/people/Mark.Calabretta
-  $Id: wcsutil.h,v 5.10 2015/10/09 08:19:15 mcalabre Exp $
+  $Id: wcsutil.h,v 6.2 2018/10/20 10:03:13 mcalabre Exp $
 *=============================================================================
 *
-* WCSLIB 5.10 - C routines that implement the FITS World Coordinate System
+* WCSLIB 6.2 - C routines that implement the FITS World Coordinate System
 * (WCS) standard.  Refer to the README file provided with WCSLIB for an
 * overview of the library.
 *
@@ -268,7 +268,7 @@
 * http://stackoverflow.com/questions/2741683/how-to-format-a-function-pointer
 *
 * Given:
-*   fptr      int(*)()  Pointer to function.
+*   fptr      void(*)() Pointer to function.
 *
 * Returned:
 *   hext      char[19]  Null-terminated string.  Should be at least 19 bytes
@@ -313,49 +313,29 @@
 * Given:
 *   buf       char *    The string containing the value
 *
-*   format    char *    The formatting directive, such as "%lf".  This
-*                       may be any of the forms accepted by sscanf(), but
-*                       should only include a single formatting directive.
-*
 * Returned:
 *   value     double *  The double value parsed from the string.
 *
 *
-* wcsutil_dpkey_int() - Get the data value in a dpkey struct as int
-* -----------------------------------------------------------------
+* wcsutil_str2double2() - Translate string to doubles, ignoring the locale
+* ------------------------------------------------------------------------
 * INTERNAL USE ONLY.
 *
-* wcsutil_dpkey_int() returns the data value in a dpkey struct as an integer
-* value.
+* wcsutil_str2double2() converts a string to a pair of doubles containing the
+* integer and fractional parts.  Unlike sscanf() it ignores the locale and
+* always expects a '.' as the decimal separator.
 *
-* Given and returned:
-*   dp        const struct dpkey *
-*                       Parsed contents of a DPja or DQia keyrecords.
+* Given:
+*   buf       char *    The string containing the value
 *
-* Function return value:
-*             int       The record's value as int.
-*
-*
-* wcsutil_dpkey_double() - Get the data value in a dpkey struct as double
-* -----------------------------------------------------------------------
-* INTERNAL USE ONLY.
-*
-* wcsutil_dpkey_double() returns the data value in a dpkey struct as a
-* floating point value.
-*
-* Given and returned:
-*   dp        const struct dpkey *
-*                       Parsed contents of a DPja or DQia keyrecords.
-*
-* Function return value:
-*             double    The record's value as double.
+* Returned:
+*   value     double[2] The double value, split into integer and fractional
+*                       parts, parsed from the string.
 *
 *===========================================================================*/
 
 #ifndef WCSLIB_WCSUTIL
 #define WCSLIB_WCSUTIL
-
-#include "dis.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -372,11 +352,10 @@ int  wcsutil_strEq(int nelem, char (*arr1)[72], char (*arr2)[72]);
 void wcsutil_setAll(int nvec, int nelem, double *first);
 void wcsutil_setAli(int nvec, int nelem, int *first);
 void wcsutil_setBit(int nelem, const int *sel, int bits, int *array);
-char *wcsutil_fptr2str(int (*func)(void), char hext[19]);
-int  wcsutil_str2double(const char *buf, const char *format, double *value);
+char *wcsutil_fptr2str(void (*fptr)(void), char hext[19]);
 void wcsutil_double2str(char *buf, const char *format, double value);
-int    wcsutil_dpkey_int(const struct dpkey *dp);
-double wcsutil_dpkey_double(const struct dpkey *dp);
+int  wcsutil_str2double(const char *buf, double *value);
+int  wcsutil_str2double2(const char *buf, double *value);
 
 #ifdef __cplusplus
 }

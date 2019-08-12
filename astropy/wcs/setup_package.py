@@ -1,9 +1,4 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
-CONTACT = "Michael Droettboom"
-EMAIL = "mdroe@stsci.edu"
 
 import io
 from os.path import join
@@ -15,37 +10,30 @@ from distutils.core import Extension
 from distutils.dep_util import newer_group
 
 
+from astropy_helpers.utils import import_file
 from astropy_helpers import setup_helpers
 from astropy_helpers.distutils_helpers import get_distutils_build_option
-from astropy.extern import six
 
 WCSROOT = os.path.relpath(os.path.dirname(__file__))
-WCSVERSION = "5.10"
+WCSVERSION = "6.2.0"
 
 
 def b(s):
     return s.encode('ascii')
 
-if six.PY3:
-    def string_escape(s):
-        s = s.decode('ascii').encode('ascii', 'backslashreplace')
-        s = s.replace(b'\n', b'\\n')
-        s = s.replace(b'\0', b'\\0')
-        return s.decode('ascii')
-elif six.PY2:
-    def string_escape(s):
-        # string_escape has subtle differences with the escaping done in Python
-        # 3 so correct for those too
-        s = s.encode('string_escape')
-        s = s.replace(r'\x00', r'\0')
-        return s.replace(r"\'", "'")
+
+def string_escape(s):
+    s = s.decode('ascii').encode('ascii', 'backslashreplace')
+    s = s.replace(b'\n', b'\\n')
+    s = s.replace(b'\0', b'\\0')
+    return s.decode('ascii')
 
 
 def determine_64_bit_int():
     """
     The only configuration parameter needed at compile-time is how to
     specify a 64-bit signed integer.  Python's ctypes module can get us
-    that information, but it is only available in Python 2.5 or later.
+    that information.
     If we can't be absolutely certain, we default to "long long int",
     which is correct on most platforms (x86, x86_64).  If we find
     platforms where this heuristic doesn't work, we may need to
@@ -80,10 +68,10 @@ def write_wcsconfig_h(paths):
     #define HAVE_WCSLIB_VERSION 1
 
     /* WCSLIB library version number. */
-    #define WCSLIB_VERSION {0}
+    #define WCSLIB_VERSION {}
 
     /* 64-bit integer data type. */
-    #define WCSLIB_INT64 {1}
+    #define WCSLIB_INT64 {}
 
     /* Windows needs some other defines to prevent inclusion of wcsset()
        which conflicts with wcslib's wcsset().  These need to be set
@@ -123,11 +111,11 @@ def write_wcsconfig_h(paths):
 
 
 def generate_c_docstrings():
-    from astropy.wcs import docstrings
+    docstrings = import_file(os.path.join(WCSROOT, 'docstrings.py'))
     docstrings = docstrings.__dict__
     keys = [
         key for key, val in docstrings.items()
-        if not key.startswith('__') and isinstance(val, six.string_types)]
+        if not key.startswith('__') and isinstance(val, str)]
     keys.sort()
     docs = {}
     for key in keys:
@@ -147,7 +135,7 @@ its contents, edit astropy/wcs/docstrings.py
 """)
     for key in keys:
         val = docs[key]
-        h_file.write('extern char doc_{0}[{1}];\n'.format(key, len(val)))
+        h_file.write('extern char doc_{}[{}];\n'.format(key, len(val)))
     h_file.write("\n#endif\n\n")
 
     setup_helpers.write_if_different(
@@ -174,10 +162,8 @@ MSVC, do not support string literals greater than 256 characters.
         c_file.write('char doc_{0}[{1}] = {{\n'.format(key, len(val)))
         for i in range(0, len(val), 12):
             section = val[i:i+12]
-            if six.PY2:
-                section = [ord(x) for x in section]
-            c_file.write('    ');
-            c_file.write(''.join('0x{0:02x}, '.format(x) for x in section))
+            c_file.write('    ')
+            c_file.write(''.join(f'0x{x:02x}, ' for x in section))
             c_file.write('\n')
 
         c_file.write("    };\n\n")
@@ -188,7 +174,8 @@ MSVC, do not support string literals greater than 256 characters.
 
 
 def get_wcslib_cfg(cfg, wcslib_files, include_paths):
-    from astropy.version import debug
+
+    debug = import_file(os.path.join(WCSROOT, '..', 'version.py')).debug
 
     cfg['include_dirs'].append('numpy')
     cfg['define_macros'].extend([
@@ -215,7 +202,7 @@ def get_wcslib_cfg(cfg, wcslib_files, include_paths):
         cfg['define_macros'].append(('DEBUG', None))
         cfg['undef_macros'].append('NDEBUG')
         if (not sys.platform.startswith('sun') and
-            not sys.platform == 'win32'):
+                not sys.platform == 'win32'):
             cfg['extra_compile_args'].extend(["-fno-inline", "-O0", "-g"])
     else:
         # Define ECHO as nothing to prevent spurious newlines from
@@ -244,9 +231,7 @@ def get_wcslib_cfg(cfg, wcslib_files, include_paths):
                 '-Wno-strict-prototypes',
                 '-Wno-unused-function',
                 '-Wno-unused-value',
-                '-Wno-uninitialized',
-                '-Wno-unused-but-set-variable'])
-
+                '-Wno-uninitialized'])
 
 
 def get_extensions():
@@ -306,9 +291,9 @@ def get_extensions():
     cfg['sources'].extend(join(WCSROOT, 'src', x) for x in astropy_wcs_files)
 
     cfg['sources'] = [str(x) for x in cfg['sources']]
-    cfg = dict((str(key), val) for key, val in six.iteritems(cfg))
+    cfg = dict((str(key), val) for key, val in cfg.items())
 
-    return [Extension(str('astropy.wcs._wcs'), **cfg)]
+    return [Extension('astropy.wcs._wcs', **cfg)]
 
 
 def get_package_data():
@@ -348,17 +333,10 @@ def get_package_data():
             api_files.append(join('include', 'wcslib', header))
 
     return {
-        str('astropy.wcs.tests'): ['data/*.hdr', 'data/*.fits',
-                                   'data/*.txt', 'data/*.fits.gz',
-                                   'maps/*.hdr', 'spectra/*.hdr',
-                                   'extension/*.c'],
-        str('astropy.wcs'): api_files,
+        'astropy.wcs.tests': ['extension/*.c'],
+        'astropy.wcs': api_files,
     }
 
 
 def get_external_libraries():
     return ['wcslib']
-
-
-def requires_2to3():
-    return False

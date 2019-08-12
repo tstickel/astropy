@@ -5,9 +5,11 @@ import optparse
 import os
 import sys
 import textwrap
+import warnings
 
-from ... import fits
-from ..util import fill
+from astropy.io import fits
+from astropy.io.fits.util import fill
+from astropy.utils.exceptions import AstropyDeprecationWarning
 
 
 log = logging.getLogger('fitsdiff')
@@ -42,7 +44,7 @@ file contains one keyword.
 Example
 -------
 
-    fitsdiff -k filename,filtnam1 -n 5 -d 1.e-6 test1.fits test2
+    fitsdiff -k filename,filtnam1 -n 5 -r 1.e-6 test1.fits test2
 
 This command will compare files test1.fits and test2.fits, report maximum of 5
 different pixels values per extension, only report data values larger than
@@ -60,7 +62,7 @@ behavior of fitsdiff on a global level, such as in a set of regression tests.
 
 class HelpFormatter(optparse.TitledHelpFormatter):
     def format_epilog(self, epilog):
-        return '\n%s\n' % fill(epilog, self.width)
+        return '\n{}\n'.format(fill(epilog, self.width))
 
 
 def handle_options(argv=None):
@@ -72,14 +74,14 @@ def handle_options(argv=None):
         if value and value[0] == '@':
             value = value[1:]
             if not os.path.exists(value):
-                log.warning('%s argument %s does not exist' % (opt, value))
+                log.warning(f'{opt} argument {value} does not exist')
                 return
             try:
                 values = [v.strip() for v in open(value, 'r').readlines()]
                 setattr(parser.values, option.dest, values)
-            except IOError as exc:
-                log.warning('reading %s for %s failed: %s; ignoring this '
-                            'argument' % (value, opt, exc))
+            except OSError as exc:
+                log.warning('reading {} for {} failed: {}; ignoring this '
+                            'argument'.format(value, opt, exc))
                 del exc
         else:
             setattr(parser.values, option.dest,
@@ -99,9 +101,23 @@ def handle_options(argv=None):
              'to report per extension (default %default).')
 
     parser.add_option(
-        '-d', '--difference-tolerance', type='float', default=0.,
+        '-d', '--difference-tolerance', type='float', default=None,
         dest='tolerance', metavar='NUMBER',
+        help='DEPRECATED. Alias for "--relative-tolerance". '
+             'Deprecated, provided for backward compatibility (default %default).')
+
+    parser.add_option(
+        '-r', '--rtol', '--relative-tolerance', type='float', default=None,
+        dest='rtol', metavar='NUMBER',
         help='The relative tolerance for comparison of two numbers, '
+             'specifically two floating point numbers.  This applies to data '
+             'in both images and tables, and to floating point keyword values '
+             'in headers (default %default).')
+
+    parser.add_option(
+        '-a', '--atol', '--absolute-tolerance', type='float', default=None,
+        dest='atol', metavar='NUMBER',
+        help='The absolute tolerance for comparison of two numbers, '
              'specifically two floating point numbers.  This applies to data '
              'in both images and tables, and to floating point keyword values '
              'in headers (default %default).')
@@ -132,6 +148,13 @@ def handle_options(argv=None):
         '-o', '--output-file', metavar='FILE',
         help='Output results to this file; otherwise results are printed to '
              'stdout.')
+
+    parser.add_option(
+        '-u', '--ignore-hdus', action='callback', callback=store_list,
+        nargs=1, type='str', default=[], dest='ignore_hdus',
+        metavar='HDU_NAMES',
+        help='Comma-separated list of HDU names not to be compared.  HDU '
+             'names may contain wildcard patterns.')
 
     group = optparse.OptionGroup(parser, 'Header Comparison Options')
 
@@ -205,53 +228,80 @@ def setup_logging(outfile=None):
 
 
 def match_files(paths):
-    filelists = []
+    if os.path.isfile(paths[0]) and os.path.isfile(paths[1]):
+        # shortcut if both paths are files
+        return [paths]
 
-    for path in paths:
+    dirnames = [None, None]
+    filelists = [None, None]
+
+    for i, path in enumerate(paths):
         if glob.has_magic(path):
-            files = [os.path.abspath(f) for f in glob.glob(path)]
+            files = [os.path.split(f) for f in glob.glob(path)]
             if not files:
-                log.error(
-                    'Wildcard pattern %r did not match any files.' % path)
+                log.error('Wildcard pattern %r did not match any files.', path)
                 sys.exit(2)
-            filelists.append(files)
+
+            dirs, files = list(zip(*files))
+            if len(set(dirs)) > 1:
+                log.error('Wildcard pattern %r should match only one '
+                          'directory.', path)
+                sys.exit(2)
+
+            dirnames[i] = set(dirs).pop()
+            filelists[i] = sorted(files)
         elif os.path.isdir(path):
-            filelists.append([os.path.abspath(f) for f in os.listdir(path)])
+            dirnames[i] = path
+            filelists[i] = sorted(os.listdir(path))
         elif os.path.isfile(path):
-            filelists.append([path])
+            dirnames[i] = os.path.dirname(path)
+            filelists[i] = [os.path.basename(path)]
         else:
             log.error(
-                '%r is not an existing file, directory, or wildcard pattern; '
-                'see `fitsdiff --help` for more usage help.' % path)
+                '%r is not an existing file, directory, or wildcard '
+                'pattern; see `fitsdiff --help` for more usage help.', path)
             sys.exit(2)
 
-    filelists[0].sort()
-    filelists[1].sort()
+        dirnames[i] = os.path.abspath(dirnames[i])
+
+    filematch = set(filelists[0]) & set(filelists[1])
 
     for a, b in [(0, 1), (1, 0)]:
-        if len(filelists[a]) > len(filelists[b]):
-            for extra in filelists[a][len(filelists[b]):]:
-                log.warning('%r has no match in %r' % (extra, paths[b]))
-            filelists[a] = filelists[a][:len(filelists[b])]
-            break
+        if len(filelists[a]) > len(filematch) and not os.path.isdir(paths[a]):
+            for extra in sorted(set(filelists[a]) - filematch):
+                log.warning('%r has no match in %r', extra, dirnames[b])
 
-    return zip(*filelists)
+    return [(os.path.join(dirnames[0], f),
+             os.path.join(dirnames[1], f)) for f in filematch]
 
 
-def main():
+def main(args=None):
+    args = args or sys.argv[1:]
+
     if 'FITSDIFF_SETTINGS' in os.environ:
-        argv = os.environ['FITSDIFF_SETTINGS'].split() + sys.argv[1:]
-    else:
-        argv = sys.argv[1:]
+        args = os.environ['FITSDIFF_SETTINGS'].split() + args
 
-    opts, args = handle_options(argv)
+    opts, args = handle_options(args)
+
+    if opts.tolerance is not None:
+        warnings.warn(
+            '"-d" ("--difference-tolerance") was deprecated in version 2.0 '
+            'and will be removed in a future version. '
+            'Use "-r" ("--relative-tolerance") instead.',
+            AstropyDeprecationWarning)
+        opts.rtol = opts.tolerance
+    if opts.rtol is None:
+        opts.rtol = 0.0
+    if opts.atol is None:
+        opts.atol = 0.0
 
     if opts.exact_comparisons:
         # override the options so that each is the most restrictive
         opts.ignore_keywords = []
         opts.ignore_comments = []
         opts.ignore_fields = []
-        opts.tolerance = 0.0
+        opts.rtol = 0.0
+        opts.atol = 0.0
         opts.ignore_blanks = False
         opts.ignore_blank_cards = False
 
@@ -263,7 +313,7 @@ def main():
     if opts.quiet:
         out_file = None
     elif opts.output_file:
-        out_file = open(opts.output_file, 'wb')
+        out_file = open(opts.output_file, 'w')
         close_file = True
     else:
         out_file = sys.stdout
@@ -274,13 +324,16 @@ def main():
             # TODO: pass in any additional arguments here too
             diff = fits.diff.FITSDiff(
                 a, b,
+                ignore_hdus=opts.ignore_hdus,
                 ignore_keywords=opts.ignore_keywords,
                 ignore_comments=opts.ignore_comments,
                 ignore_fields=opts.ignore_fields,
                 numdiffs=opts.numdiffs,
-                tolerance=opts.tolerance,
+                rtol=opts.rtol,
+                atol=opts.atol,
                 ignore_blanks=opts.ignore_blanks,
                 ignore_blank_cards=opts.ignore_blank_cards)
+
             diff.report(fileobj=out_file)
             identical.append(diff.identical)
 
@@ -288,3 +341,9 @@ def main():
     finally:
         if close_file:
             out_file.close()
+        # Close the file if used for the logging output, and remove handlers to
+        # avoid having them multiple times for unit tests.
+        for handler in log.handlers:
+            if isinstance(handler, logging.FileHandler):
+                handler.close()
+            log.removeHandler(handler)

@@ -8,27 +8,26 @@ Classes to read DAOphot table format
 :Author: Tom Aldcroft (aldcroft@head.cfa.harvard.edu)
 """
 
-from __future__ import absolute_import, division, print_function
 
 import re
 import numpy as np
 import itertools as itt
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 from . import core
 from . import fixedwidth
-from ...utils import OrderedDict
-from ...extern.six.moves import zip, map
 from .misc import first_true_index, first_false_index, groupmore
 
 
 class DaophotHeader(core.BaseHeader):
-    """Read the header from a file produced by the IRAF DAOphot routine."""
+    """
+    Read the header from a file produced by the IRAF DAOphot routine.
+    """
 
     comment = r'\s*#K'
 
     # Regex for extracting the format strings
-    re_format = re.compile('%-?(\d+)\.?\d?[sdfg]')
+    re_format = re.compile(r'%-?(\d+)\.?\d?[sdfg]')
     re_header_keyword = re.compile(r'[#]K'
                                    r'\s+ (?P<name> \w+)'
                                    r'\s* = (?P<stuff> .+) $',
@@ -132,7 +131,9 @@ class DaophotHeader(core.BaseHeader):
             self.names = coldef_dict['#N']
 
     def extract_keyword_line(self, line):
-        """extract info from a header keyword line (#K) """
+        """
+        Extract info from a header keyword line (#K)
+        """
         m = self.re_header_keyword.match(line)
         if m:
             vals = m.group('stuff').strip().rsplit(None, 2)
@@ -142,12 +143,22 @@ class DaophotHeader(core.BaseHeader):
             return m.group('name'), keyword_dict
 
     def get_cols(self, lines):
-        """Initialize the header Column objects from the table ``lines`` for a DAOphot
+        """
+        Initialize the header Column objects from the table ``lines`` for a DAOphot
         header.  The DAOphot header is specialized so that we just copy the entire BaseHeader
         get_cols routine and modify as needed.
 
-        :param lines: list of table lines
-        :returns: list of table Columns
+
+
+        Parameters
+        ----------
+        lines : list
+            List of table lines
+
+        Returns
+        ----------
+        col : list
+            List of table Columns
         """
 
         if not self.names:
@@ -215,7 +226,8 @@ class DaophotInputter(core.ContinuationLinesInputter):
     re_multiline = re.compile(r'(#?)[^\\*#]*(\*?)(\\*) ?$')
 
     def search_multiline(self, lines, depth=150):
-        """Search lines for special continuation character to determine number of
+        """
+        Search lines for special continuation character to determine number of
         continued rows in a datablock.  For efficiency, depth gives the upper
         limit of lines to search.
         """
@@ -264,13 +276,13 @@ class DaophotInputter(core.ContinuationLinesInputter):
     def process_lines(self, lines):
 
         markers, block, header = self.search_multiline(lines)
-        self.data.is_multiline = not markers is None
+        self.data.is_multiline = markers is not None
         self.data.markers = markers
         self.data.first_block = block
         # set the header lines returned by the search as a attribute of the header
         self.data.header.lines = header
 
-        if not markers is None:
+        if markers is not None:
             lines = lines[markers[0]:]
 
         continuation_char = self.continuation_char
@@ -294,13 +306,16 @@ class DaophotInputter(core.ContinuationLinesInputter):
                     outlines.append(''.join(parts))
                     parts = []
             else:
-                raise ValueError('multiline re could not match line %i: %s' % (i, line))
+                raise core.InconsistentTableError('multiline re could not match line '
+                                 '{}: {}'.format(i, line))
 
         return outlines
 
 
 class Daophot(core.BaseReader):
-    """Read a DAOphot file.
+    """
+    DAOphot format table.
+
     Example::
 
       #K MERGERAD   = INDEF                   scaleunit  %-23.7g
@@ -324,7 +339,7 @@ class Daophot(core.BaseReader):
 
       >>> import os
       >>> from astropy.io import ascii
-      >>> filename = os.path.join(ascii.__path__[0], 'tests/t/daophot.dat')
+      >>> filename = os.path.join(ascii.__path__[0], 'tests/data/daophot.dat')
       >>> data = ascii.read(filename)
       >>> for name, keyword in data.meta['keywords'].items():
       ...     print(name, keyword['value'], keyword['units'], keyword['format'])

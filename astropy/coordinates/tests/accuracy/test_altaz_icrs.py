@@ -8,21 +8,53 @@ machines and we want the tests to pass there.
 TODO: check if these tests pass on 32-bit machines and implement
 higher-precision checks on 64-bit machines.
 """
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-from ....tests.helper import pytest, catch_warnings
-from .... import units as u
-from ....time import Time, TimeDelta
-from ...builtin_frames import AltAz
-from ... import EarthLocation
-from ... import Angle, SkyCoord
+
+import pytest
+
+from astropy import units as u
+from astropy.time import Time
+from astropy.coordinates.builtin_frames import AltAz
+from astropy.coordinates import EarthLocation
+from astropy.coordinates import Angle, SkyCoord
 
 
+@pytest.mark.remote_data
 def test_against_hor2eq():
     """Check that Astropy gives consistent results with an IDL hor2eq example.
 
-    See EXAMPLE input and output here:
-    http://idlastro.gsfc.nasa.gov/ftp/pro/astro/hor2eq.pro
+    See : http://idlastro.gsfc.nasa.gov/ftp/pro/astro/hor2eq.pro
+
+    Test is against these run outputs, run at 2000-01-01T12:00:00:
+
+      # NORMAL ATMOSPHERE CASE
+      IDL> hor2eq, ten(37,54,41), ten(264,55,06), 2451545.0d, ra, dec, /verb, obs='kpno', pres=781.0, temp=273.0
+      Latitude = +31 57 48.0   Longitude = *** 36 00.0
+      Julian Date =  2451545.000000
+      Az, El =  17 39 40.4  +37 54 41   (Observer Coords)
+      Az, El =  17 39 40.4  +37 53 40   (Apparent Coords)
+      LMST = +11 15 26.5
+      LAST = +11 15 25.7
+      Hour Angle = +03 38 30.1  (hh:mm:ss)
+      Ra, Dec:  07 36 55.6  +15 25 02   (Apparent Coords)
+      Ra, Dec:  07 36 55.2  +15 25 08   (J2000.0000)
+      Ra, Dec:  07 36 55.2  +15 25 08   (J2000)
+      IDL> print, ra, dec
+             114.23004       15.418818
+
+      # NO PRESSURE CASE
+      IDL> hor2eq, ten(37,54,41), ten(264,55,06), 2451545.0d, ra, dec, /verb, obs='kpno', pres=0.0, temp=273.0
+      Latitude = +31 57 48.0   Longitude = *** 36 00.0
+      Julian Date =  2451545.000000
+      Az, El =  17 39 40.4  +37 54 41   (Observer Coords)
+      Az, El =  17 39 40.4  +37 54 41   (Apparent Coords)
+      LMST = +11 15 26.5
+      LAST = +11 15 25.7
+      Hour Angle = +03 38 26.4  (hh:mm:ss)
+      Ra, Dec:  07 36 59.3  +15 25 31   (Apparent Coords)
+      Ra, Dec:  07 36 58.9  +15 25 37   (J2000.0000)
+      Ra, Dec:  07 36 58.9  +15 25 37   (J2000)
+      IDL> print, ra, dec
+             114.24554       15.427022
     """
     # Observatory position for `kpno` from here:
     # http://idlastro.gsfc.nasa.gov/ftp/pro/astro/observatory.pro
@@ -30,34 +62,37 @@ def test_against_hor2eq():
                              lat=Angle('31d57.8m'),
                              height=2120. * u.m)
 
-    # obstime = Time('2041-12-26 05:00:00')
-    obstime = Time(2466879.7083333, format='jd')
-    # obstime += TimeDelta(-2, format='sec')
+    obstime = Time(2451545.0, format='jd', scale='ut1')
 
     altaz_frame = AltAz(obstime=obstime, location=location,
                         temperature=0 * u.deg_C, pressure=0.781 * u.bar)
+    altaz_frame_noatm = AltAz(obstime=obstime, location=location,
+                              temperature=0 * u.deg_C, pressure=0.0 * u.bar)
     altaz = SkyCoord('264d55m06s 37d54m41s', frame=altaz_frame)
+    altaz_noatm = SkyCoord('264d55m06s 37d54m41s', frame=altaz_frame_noatm)
 
     radec_frame = 'icrs'
 
-    # The following transformation throws a warning about precision problems
-    # because the observation date is in the future
-    with catch_warnings() as _:
-        radec_actual = altaz.transform_to(radec_frame)
+    radec_actual = altaz.transform_to(radec_frame)
+    radec_actual_noatm = altaz_noatm.transform_to(radec_frame)
 
-    radec_expected = SkyCoord('00h13m14.1s  +15d11m0.3s', frame=radec_frame)
+    radec_expected = SkyCoord('07h36m55.2s +15d25m08s', frame=radec_frame)
     distance = radec_actual.separation(radec_expected).to('arcsec')
-    # print(radec_expected)
-    # print(radec_actual)
-    # print(distance)
 
-    # TODO: why is there a difference of 2.6 arcsec currently?
-    # radec_expected = ra=3.30875 deg, dec=15.183416666666666 deg
-    # radec_actual = ra=3.3094193224314625 deg, dec=15.183757021354532 deg
-    # distance = 2.6285 arcsec
+    # this comes from running the example hor2eq but with the pressure set to 0
+    radec_expected_noatm = SkyCoord('07h36m58.9s +15d25m37s', frame=radec_frame)
+    distance_noatm = radec_actual_noatm.separation(radec_expected_noatm).to('arcsec')
+
+    # The baseline difference is ~2.3 arcsec with one atm of pressure. The
+    # difference is mainly due to the somewhat different atmospheric model that
+    # hor2eq assumes.  This is confirmed by the second test which has the
+    # atmosphere "off" - the residual difference is small enough to be embedded
+    # in the assumptions about "J2000" or rounding errors.
     assert distance < 5 * u.arcsec
+    assert distance_noatm < 0.4 * u.arcsec
 
 
+@pytest.mark.remote_data
 def test_against_pyephem():
     """Check that Astropy gives consistent results with one PyEphem example.
 
@@ -94,6 +129,7 @@ def test_against_pyephem():
     assert distance < 1 * u.arcsec
 
 
+@pytest.mark.remote_data
 def test_against_jpl_horizons():
     """Check that Astropy gives consistent results with the JPL Horizons example.
 
@@ -116,7 +152,8 @@ def test_against_jpl_horizons():
     assert distance < 1 * u.arcsec
 
 
-@pytest.mark.xfail
+@pytest.mark.remote_data
+@pytest.mark.xfail(reason="Current output is completely incorrect")
 def test_fk5_equinox_and_epoch_j2000_0_to_topocentric_observed():
     """
     http://phn.github.io/pytpm/conversions.html#fk5-equinox-and-epoch-j2000-0-to-topocentric-observed
@@ -127,7 +164,7 @@ def test_fk5_equinox_and_epoch_j2000_0_to_topocentric_observed():
                              lat=Angle('31.956389d'),
                              height=2093.093 * u.m)  # TODO: height correct?
 
-    obstime = Time('2010-01-01 12:00:00', scale='utc')
+    obstime = Time('2010-01-01 12:00:00')
     # relative_humidity = ?
     # obswl = ?
     altaz_frame = AltAz(obstime=obstime, location=location,

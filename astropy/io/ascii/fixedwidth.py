@@ -8,9 +8,6 @@ fixedwidth.py:
 :Author: Tom Aldcroft (aldcroft@head.cfa.harvard.edu)
 """
 
-from __future__ import absolute_import, division, print_function
-
-from ...extern.six.moves import zip
 
 from . import core
 from .core import InconsistentTableError, DefaultSplitter
@@ -112,7 +109,8 @@ class FixedWidthHeader(basic.BasicHeader):
                     'No data lines found so cannot autogenerate column names')
             vals, starts, ends = self.get_fixedwidth_params(data_lines[0])
 
-            self.names = [self.auto_format % i for i in range(1, len(vals) + 1)]
+            self.names = [self.auto_format.format(i)
+                          for i in range(1, len(vals) + 1)]
 
         else:
             # This bit of code handles two cases:
@@ -139,9 +137,9 @@ class FixedWidthHeader(basic.BasicHeader):
                     # purity here.
                 charset = self.set_of_position_line_characters.union(set([self.splitter.delimiter, ' ']))
                 if not set(line).issubset(charset):
-                    raise InconsistentTableError('Characters in position line must be part of {0}'.format(charset))
+                    raise InconsistentTableError(f'Characters in position line must be part of {charset}')
                 vals, self.col_starts, col_ends = self.get_fixedwidth_params(line)
-                self.col_ends = [x - 1 for x in col_ends]
+                self.col_ends = [x - 1 if x is not None else None for x in col_ends]
 
             # Get the header column names and column positions
             line = self.get_line(lines, start_line)
@@ -187,7 +185,7 @@ class FixedWidthHeader(basic.BasicHeader):
         # been given, so figure out whichever wasn't given.
         if self.col_starts is not None and self.col_ends is not None:
             starts = list(self.col_starts)  # could be any iterable, e.g. np.array
-            ends = [x + 1 for x in self.col_ends]  # user supplies inclusive endpoint
+            ends = [x + 1 if x is not None else None for x in self.col_ends]  # user supplies inclusive endpoint
             if len(starts) != len(ends):
                 raise ValueError('Fixed width col_starts and col_ends must have the same length')
             vals = [line[start:end].strip() for start, end in zip(starts, ends)]
@@ -210,10 +208,10 @@ class FixedWidthHeader(basic.BasicHeader):
             # exactly one of col_starts or col_ends is given...
             if self.col_starts is not None:
                 starts = list(self.col_starts)
-                ends = starts[1:] + [None] # Assume each col ends where the next starts
-            else: # self.col_ends is not None
+                ends = starts[1:] + [None]  # Assume each col ends where the next starts
+            else:  # self.col_ends is not None
                 ends = [x + 1 for x in self.col_ends]
-                starts = [0] + ends[:-1] # Assume each col starts where the last ended
+                starts = [0] + ends[:-1]  # Assume each col starts where the last ended
             vals = [line[start:end].strip() for start, end in zip(starts, ends)]
 
         return vals, starts, ends
@@ -251,7 +249,8 @@ class FixedWidthData(basic.BasicData):
         if self.header.position_line is not None:
             char = self.header.position_char
             if len(char) != 1:
-                raise ValueError('Position_char="%s" must be a single character' % char)
+                raise ValueError('Position_char="{}" must be a single '
+                                 'character'.format(char))
             vals = [char * col.width for col in self.cols]
             lines.append(self.splitter.join(vals, widths))
 
@@ -262,9 +261,9 @@ class FixedWidthData(basic.BasicData):
 
 
 class FixedWidth(basic.Basic):
-    """
-    Read or write a fixed width table with a single header line that defines column
-    names and positions.  Examples::
+    """Fixed width table with single header line defining column names and positions.
+
+    Examples::
 
       # Bar delimiter in header and data
 
@@ -293,9 +292,8 @@ class FixedWidth(basic.Basic):
     header_class = FixedWidthHeader
     data_class = FixedWidthData
 
-
     def __init__(self, col_starts=None, col_ends=None, delimiter_pad=' ', bookend=True):
-        super(FixedWidth, self).__init__()
+        super().__init__()
         self.data.splitter.delimiter_pad = delimiter_pad
         self.data.splitter.bookend = bookend
         self.header.col_starts = col_starts
@@ -313,12 +311,13 @@ class FixedWidthNoHeaderData(FixedWidthData):
 
 
 class FixedWidthNoHeader(FixedWidth):
-    """
-    Read or write a fixed width table which has no header line.  Column
-    names are either input (``names`` keyword) or auto-generated.  Column
-    positions are determined either by input (``col_starts`` and ``col_stops``
-    keywords) or by splitting the first data line.  In the latter case a
-    ``delimiter`` is required to split the data line.
+    """Fixed width table which has no header line.
+
+    When reading, column names are either input (``names`` keyword) or
+    auto-generated.  Column positions are determined either by input
+    (``col_starts`` and ``col_stops`` keywords) or by splitting the first data
+    line.  In the latter case a ``delimiter`` is required to split the data
+    line.
 
     Examples::
 
@@ -343,10 +342,9 @@ class FixedWidthNoHeader(FixedWidth):
     header_class = FixedWidthNoHeaderHeader
     data_class = FixedWidthNoHeaderData
 
-
     def __init__(self, col_starts=None, col_ends=None, delimiter_pad=' ', bookend=True):
-        super(FixedWidthNoHeader, self).__init__(col_starts, col_ends,
-                            delimiter_pad=delimiter_pad, bookend=bookend)
+        super().__init__(col_starts, col_ends, delimiter_pad=delimiter_pad,
+                         bookend=bookend)
 
 
 class FixedWidthTwoLineHeader(FixedWidthHeader):
@@ -370,10 +368,12 @@ class FixedWidthTwoLineData(FixedWidthData):
 
 
 class FixedWidthTwoLine(FixedWidth):
-    """
-    Read or write a fixed width table which has two header lines.  The first
-    header line defines the column names and the second implicitly defines the
-    column positions.  Examples::
+    """Fixed width table which has two header lines.
+
+    The first header line defines the column names and the second implicitly
+    defines the column positions.
+
+    Examples::
 
       # Typical case with column extent defined by ---- under column names.
 
@@ -400,7 +400,7 @@ class FixedWidthTwoLine(FixedWidth):
     header_class = FixedWidthTwoLineHeader
 
     def __init__(self, position_line=1, position_char='-', delimiter_pad=None, bookend=False):
-        super(FixedWidthTwoLine, self).__init__(delimiter_pad=delimiter_pad, bookend=bookend)
+        super().__init__(delimiter_pad=delimiter_pad, bookend=bookend)
         self.header.position_line = position_line
         self.header.position_char = position_char
         self.data.start_line = position_line + 1

@@ -11,7 +11,14 @@ astronomers' needs.
 
 """
 
-from .funcs import *
-from .sigma_clipping import *
-from .bayesian_blocks import *
-from .histogram import *
+from .funcs import *  # noqa
+from .biweight import *  # noqa
+from .sigma_clipping import *  # noqa
+from .jackknife import *  # noqa
+from .circstats import *  # noqa
+from .bayesian_blocks import *  # noqa
+from .histogram import *  # noqa
+from .info_theory import *  # noqa
+from .lombscargle import *  # noqa
+from .spatial import *  # noqa
+from .bls import *  # noqa

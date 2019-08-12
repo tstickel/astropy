@@ -1,7 +1,7 @@
 .. _bounding-boxes:
 
 Efficient Model Rendering with Bounding Boxes
-=============================================
+*********************************************
 
 .. versionadded:: 1.1
 
@@ -22,12 +22,12 @@ no other input array is passed. To instead extract postage stamps from the data
 array itself, see :ref:`cutout_images`.
 
 Using the Bounding Box
------------------------
+=======================
 
 For basic usage, see `Model.bounding_box
 <astropy.modeling.Model.bounding_box>`.  By default no
 `~astropy.modeling.Model.bounding_box` is set, except on model subclasses where
-a ``bounding_box`` property or method is explicity defined. The default is then
+a ``bounding_box`` property or method is explicitly defined. The default is then
 the minimum rectangular region symmetric about the position that fully contains
 the model. If the model does not have a finite extent, the containment criteria
 are noted in the documentation. For example, see ``Gaussian2D.bounding_box``.
@@ -63,7 +63,7 @@ with `~astropy.modeling.custom_model` or as a compound model::
     for a compound model where possible.
 
 Efficient evaluation with `Model.render() <astropy.modeling.Model.render>`
---------------------------------------------------------------------------
+==========================================================================
 
 When a model is evaluated over a range much larger than the model itself, it
 may be prudent to use the :func:`Model.render <astropy.modeling.Model.render>`

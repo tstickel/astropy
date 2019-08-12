@@ -1,16 +1,10 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-# TEST_UNICODE_LITERALS
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
-import os
-
+import pytest
 import numpy as np
 
-from ...tests.helper import pytest
-from .. import FlagCollection
+from astropy.nddata import FlagCollection
 
 
 def test_init():
@@ -47,7 +41,6 @@ def test_setitem_invalid_type(value):
     assert exc.value.args[0] == 'flags should be given as a Numpy array'
 
 
-@pytest.mark.skipif("os.environ.get('APPVEYOR')",  reason="fails on AppVeyor")
 def test_setitem_invalid_shape():
     f = FlagCollection(shape=(1, 2, 3))
     with pytest.raises(ValueError) as exc:

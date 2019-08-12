@@ -2,14 +2,15 @@
 import functools
 import itertools
 
+import pytest
 import numpy as np
 
-from ...tests.helper import pytest
-from .. import Time
-from ..core import SIDEREAL_TIME_MODELS
+from astropy.time import Time
+from astropy.time.core import SIDEREAL_TIME_MODELS
+from astropy.utils import iers
 
-allclose_hours = functools.partial(np.allclose, rtol=1e-15, atol=1e-9)
-# 1 nanosec atol
+allclose_hours = functools.partial(np.allclose, rtol=1e-15, atol=3e-8)
+# 0.1 ms atol; IERS-B files change at that level.
 within_1_second = functools.partial(np.allclose, rtol=1., atol=1./3600.)
 within_2_seconds = functools.partial(np.allclose, rtol=1., atol=2./3600.)
 
@@ -21,7 +22,7 @@ def test_doc_string_contains_models():
             assert model in Time.sidereal_time.__doc__
 
 
-class TestERFATestCases():
+class TestERFATestCases:
     """Test that we reproduce the test cases given in erfa/src/t_erfa_c.c"""
     # all tests use the following JD inputs
     time_ut1 = Time(2400000.5, 53736.0, scale='ut1', format='jd')
@@ -45,11 +46,11 @@ class TestERFATestCases():
         result, precision, name = erfa_test_input
         if name[4] == 'm':
             kind = 'mean'
-            model_name = 'IAU{0:2d}{1:s}'.format(20 if name[7] == '0' else 19,
+            model_name = 'IAU{:2d}{:s}'.format(20 if name[7] == '0' else 19,
                                                  name[7:])
         else:
             kind = 'apparent'
-            model_name = 'IAU{0:2d}{1:s}'.format(20 if name[6] == '0' else 19,
+            model_name = 'IAU{:2d}{:s}'.format(20 if name[6] == '0' else 19,
                                                  name[6:].upper())
 
         assert kind in SIDEREAL_TIME_MODELS.keys()
@@ -57,23 +58,32 @@ class TestERFATestCases():
 
         model = SIDEREAL_TIME_MODELS[kind][model_name]
         gst_erfa = self.time_ut1._erfa_sidereal_time(model)
-        assert np.allclose(gst_erfa.to('radian').value, result,
+        assert np.allclose(gst_erfa.to_value('radian'), result,
                            rtol=1., atol=precision)
 
         gst = self.time_ut1.sidereal_time(kind, 'greenwich', model_name)
-        assert np.allclose(gst.to('radian').value, result,
+        assert np.allclose(gst.to_value('radian'), result,
                            rtol=1., atol=precision)
 
 
-class TestST():
+class TestST:
     """Test Greenwich Sidereal Time.  Unlike above, this is relative to
     what was found earlier, so checks changes in implementation, including
     leap seconds, rather than correctness"""
 
-    t1 = Time(['2012-06-30 12:00:00', '2012-06-30 23:59:59',
-               '2012-06-30 23:59:60', '2012-07-01 00:00:00',
-               '2012-07-01 12:00:00'], scale='utc')
-    t2 = Time(t1, location=('120d', '10d'))
+    @classmethod
+    def setup_class(cls):
+        cls.orig_auto_download = iers.conf.auto_download
+        iers.conf.auto_download = False
+
+        cls.t1 = Time(['2012-06-30 12:00:00', '2012-06-30 23:59:59',
+                       '2012-06-30 23:59:60', '2012-07-01 00:00:00',
+                       '2012-07-01 12:00:00'], scale='utc')
+        cls.t2 = Time(cls.t1, location=('120d', '10d'))
+
+    @classmethod
+    def teardown_class(cls):
+        iers.conf.auto_download = cls.orig_auto_download
 
     def test_gmst(self):
         """Compare Greenwich Mean Sidereal Time with what was found earlier
@@ -122,9 +132,9 @@ class TestST():
         lmst2 = self.t2.sidereal_time(kind)
         assert allclose_hours(lmst2.value, lst_compare[kind])
         assert allclose_hours((lmst2-gmst2).wrap_at('12h').value,
-                              self.t2.location.longitude.to('hourangle').value)
+                              self.t2.location.lon.to_value('hourangle'))
         # check it also works when one gives longitude explicitly
-        lmst1 = self.t1.sidereal_time(kind, self.t2.location.longitude)
+        lmst1 = self.t1.sidereal_time(kind, self.t2.location.lon)
         assert allclose_hours(lmst1.value, lst_compare[kind])
 
     def test_lst_needs_location(self):
@@ -134,9 +144,20 @@ class TestST():
             self.t1.sidereal_time('mean', None)
 
 
-class TestModelInterpretation():
+class TestModelInterpretation:
     """Check that models are different, and that wrong models are recognized"""
-    t = Time(['2012-06-30 12:00:00'], scale='utc', location=('120d', '10d'))
+
+    @classmethod
+    def setup_class(cls):
+        cls.orig_auto_download = iers.conf.auto_download
+        iers.conf.auto_download = False
+
+        cls.t = Time(['2012-06-30 12:00:00'], scale='utc',
+                     location=('120d', '10d'))
+
+    @classmethod
+    def teardown_class(cls):
+        iers.conf.auto_download = cls.orig_auto_download
 
     @pytest.mark.parametrize('kind', ('mean', 'apparent'))
     def test_model_uniqueness(self, kind):

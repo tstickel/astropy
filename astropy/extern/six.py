@@ -5,10 +5,16 @@ Handle loading six package from system or from the bundled copy
 """
 
 import imp
+import warnings
 from distutils.version import StrictVersion
 
+from astropy.utils.exceptions import AstropyDeprecationWarning
 
-_SIX_MIN_VERSION = StrictVersion('1.7.3')
+warnings.warn('astropy.extern.six will be removed in 4.0, use the '
+              'six module directly if it is still needed',
+              AstropyDeprecationWarning)
+
+_SIX_MIN_VERSION = StrictVersion('1.10.0')
 
 # Update this to prevent Astropy from using its bundled copy of six
 # (but only if some other version of at least _SIX_MIN_VERSION can

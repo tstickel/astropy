@@ -2,15 +2,22 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 """
-This package defines colloquially used Imperial units.  By default, they
-are not enabled.  To enable them, do::
+This package defines colloquially used Imperial units.  They are
+available in the `astropy.units.imperial` namespace, but not in the
+top-level `astropy.units` namespace, e.g.::
 
-    >>> from astropy.units import imperial
-    >>> imperial.enable()  # doctest: +SKIP
+    >>> import astropy.units as u
+    >>> mph = u.imperial.mile / u.hour
+    >>> mph
+    Unit("mi / h")
+
+To include them in `~astropy.units.UnitBase.compose` and the results of
+`~astropy.units.UnitBase.find_equivalent_units`, do::
+
+    >>> import astropy.units as u
+    >>> u.imperial.enable()  # doctest: +SKIP
 """
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
 
 from .core import UnitBase, def_unit
 from . import si
@@ -73,6 +80,8 @@ def_unit(['st', 'stone'], 14 * lb, namespace=_ns,
          doc="International avoirdupois stone: mass")
 def_unit(['ton'], 2000 * lb, namespace=_ns,
          doc="International avoirdupois ton: mass")
+def_unit(['slug'], 32.174049 * lb, namespace=_ns,
+         doc="slug: mass")
 
 
 ###########################################################################
@@ -85,7 +94,7 @@ def_unit(['kn', 'kt', 'knot', 'NMPH'], nmi / si.h, namespace=_ns,
 ###########################################################################
 # FORCE
 
-def_unit('lbf', 32.174049 * lb * ft * si.s**-2, namespace=_ns,
+def_unit('lbf', slug * ft * si.s**-2, namespace=_ns,
          doc="Pound: force")
 def_unit(['kip', 'kilopound'], 1000 * lbf, namespace=_ns,
          doc="Kilopound: force")

@@ -31,7 +31,6 @@ And for JavaScript:
 Notes for developers
 --------------------
 
-
 jQuery/DataTables
 ^^^^^^^^^^^^^^^^^
 the minified files are the ones that are used in the table viewer feature, but
@@ -96,7 +95,8 @@ configuration module::
 Third-party packagers can override the defaults for these configuration items
 (by modifying the configuration objects in ``astropy/table/jsviewer.py``, or
 provide astropy config files that include the overrides appropriate for the
-packaged version.
+packaged version.  They would *also* need to set the default
+``use_local_files`` option to ``False`` for these settings to be read.
 
 
 Other
@@ -110,7 +110,7 @@ to that used by ``six`` for the other modules.
 
 .. _ConfigObj: https://github.com/DiffSK/configobj
 .. _PLY: http://www.dabeaz.com/ply/
-.. _pytest: http://pytest.org/latest/
+.. _pytest: https://pytest.org/en/latest/
 .. _Six: http://pypi.python.org/pypi/six/
 .. _jQuery: http://jquery.com/
 .. _DataTables: http://www.datatables.net/

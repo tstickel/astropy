@@ -35,14 +35,15 @@ function.
 References
 ----------
 .. [1] http://adsabs.harvard.edu/abs/2012arXiv1207.5578S
-.. [2] http://astroML.org/ http://github.com/astroML/astroML/
+.. [2] http://astroML.org/ https://github.com//astroML/astroML/
 """
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
+
+import warnings
 
 import numpy as np
 
-from ..utils.compat.funcsigs import signature
+from inspect import signature
+from astropy.utils.exceptions import AstropyUserWarning
 
 # TODO: implement other fitness functions from appendix B of Scargle 2012
 
@@ -85,7 +86,7 @@ def bayesian_blocks(t, x=None, sigma=None,
           :math:`-\ln({\tt gamma})`.
 
         In all three cases, if more than one of ``p0``, ``gamma``, and
-        ``ncp_prior`` is chosen, ``ncp_prior`` takes precendence over ``gamma``
+        ``ncp_prior`` is chosen, ``ncp_prior`` takes precedence over ``gamma``
         which takes precedence over ``p0``.
 
         Alternatively, the fitness parameter can be an instance of
@@ -115,7 +116,7 @@ def bayesian_blocks(t, x=None, sigma=None,
 
     Regular event data:
 
-    >>> dt = 0.01
+    >>> dt = 0.05
     >>> t = dt * np.arange(1000)
     >>> x = np.zeros(len(t))
     >>> x[np.random.randint(0, len(t), len(t) // 10)] = 1
@@ -153,7 +154,7 @@ def bayesian_blocks(t, x=None, sigma=None,
     return fitfunc.fit(t, x, sigma)
 
 
-class FitnessFunc(object):
+class FitnessFunc:
     """Base class for bayesian blocks fitness functions
 
     Derived classes should overload the following method:
@@ -161,7 +162,7 @@ class FitnessFunc(object):
     ``fitness(self, **kwargs)``:
       Compute the fitness given a set of named arguments.
       Arguments accepted by fitness must be among ``[T_k, N_k, a_k, b_k, c_k]``
-      (See Scargle2012_ for details on the meaning of these parameters).
+      (See [1]_ for details on the meaning of these parameters).
 
     Additionally, other methods may be overloaded as well:
 
@@ -179,21 +180,20 @@ class FitnessFunc(object):
 
     ``p0_prior(self, N)``:
       Specify the form of the prior given the false-alarm probability ``p0``
-      (See Scargle2012_ for details).
+      (See [1]_ for details).
 
     For examples of implemented fitness functions, see :class:`Events`,
     :class:`RegularEvents`, and :class:`PointMeasures`.
 
     References
     ----------
-    .. [Scargle2012] Scargle, J et al. (2012)
+    .. [1] Scargle, J et al. (2012)
        http://adsabs.harvard.edu/abs/2012arXiv1207.5578S
     """
     def __init__(self, p0=0.05, gamma=None, ncp_prior=None):
         self.p0 = p0
         self.gamma = gamma
         self.ncp_prior = ncp_prior
-
 
     def validate_input(self, t, x=None, sigma=None):
         """Validate inputs to the model.
@@ -274,7 +274,7 @@ class FitnessFunc(object):
 
         Note that there was an error in this equation in the original Scargle
         paper (the "log" was missing). The following corrected form is taken
-        from http://arxiv.org/abs/1304.2818
+        from https://arxiv.org/abs/1304.2818
         """
         return 4 - np.log(73.53 * self.p0 * (N ** -0.478))
 
@@ -289,12 +289,14 @@ class FitnessFunc(object):
         If ``ncp_prior`` is not explicitly defined, compute it from ``gamma``
         or ``p0``.
         """
-        if self.ncp_prior is not None:
-            return self.ncp_prior
-        elif self.gamma is not None:
+
+        if self.gamma is not None:
             return -np.log(self.gamma)
         elif self.p0 is not None:
             return self.p0_prior(N)
+        else:
+            raise ValueError("``ncp_prior`` cannot be computed as neither "
+                             "``gamma`` nor ``p0`` is defined.")
 
     def fit(self, t, x=None, sigma=None):
         """Fit the Bayesian Blocks model given the specified fitness function.
@@ -337,9 +339,12 @@ class FitnessFunc(object):
         # Compute ncp_prior if not defined
         if self.ncp_prior is None:
             ncp_prior = self.compute_ncp_prior(N)
-        #-----------------------------------------------------------------
+        else:
+            ncp_prior = self.ncp_prior
+
+        # ----------------------------------------------------------------
         # Start with first data cell; add one cell at each iteration
-        #-----------------------------------------------------------------
+        # ----------------------------------------------------------------
         for R in range(N):
             # Compute fit_vec : fitness of putative last block (end at R)
             kwds = {}
@@ -374,9 +379,9 @@ class FitnessFunc(object):
             last[R] = i_max
             best[R] = A_R[i_max]
 
-        #-----------------------------------------------------------------
+        # ----------------------------------------------------------------
         # Now find changepoints by iteratively peeling off the last block
-        #-----------------------------------------------------------------
+        # ----------------------------------------------------------------
         change_points = np.zeros(N, dtype=int)
         i_cp = N
         ind = N
@@ -417,20 +422,19 @@ class Events(FitnessFunc):
     """
     def __init__(self, p0=0.05, gamma=None, ncp_prior=None):
         if p0 is not None and gamma is None and ncp_prior is None:
-            import warnings
             warnings.warn('p0 does not seem to accurately represent the false '
                           'positive rate for event data. It is highly '
                           'recommended that you run random trials on signal-'
                           'free noise to calibrate ncp_prior to achieve a '
-                          'desired false positive rate.')
-        super(Events, self).__init__(p0, gamma, ncp_prior)
+                          'desired false positive rate.', AstropyUserWarning)
+        super().__init__(p0, gamma, ncp_prior)
 
     def fitness(self, N_k, T_k):
         # eq. 19 from Scargle 2012
         return N_k * (np.log(N_k) - np.log(T_k))
 
     def validate_input(self, t, x, sigma):
-        t, x, sigma = super(Events, self).validate_input(t, x, sigma)
+        t, x, sigma = super().validate_input(t, x, sigma)
         if x is not None and np.any(x % 1 > 0):
             raise ValueError("x must be integer counts for fitness='events'")
         return t, x, sigma
@@ -459,10 +463,10 @@ class RegularEvents(FitnessFunc):
     """
     def __init__(self, dt, p0=0.05, gamma=None, ncp_prior=None):
         self.dt = dt
-        super(RegularEvents, self).__init__(p0, gamma, ncp_prior)
+        super().__init__(p0, gamma, ncp_prior)
 
     def validate_input(self, t, x, sigma):
-        t, x, sigma = super(RegularEvents, self).validate_input(t, x, sigma)
+        t, x, sigma = super().validate_input(t, x, sigma)
         if not np.all((x == 0) | (x == 1)):
             raise ValueError("Regular events must have only 0 and 1 in x")
         return t, x, sigma
@@ -474,9 +478,8 @@ class RegularEvents(FitnessFunc):
 
         eps = 1E-8
         if np.any(N_over_M > 1 + eps):
-            import warnings
             warnings.warn('regular events: N/M > 1.  '
-                          'Is the time step correct?')
+                          'Is the time step correct?', AstropyUserWarning)
 
         one_m_NM = 1 - N_over_M
         N_over_M[N_over_M <= 0] = 1
@@ -501,7 +504,7 @@ class PointMeasures(FitnessFunc):
         ignored.
     """
     def __init__(self, p0=0.05, gamma=None, ncp_prior=None):
-        super(PointMeasures, self).__init__(p0, gamma, ncp_prior)
+        super().__init__(p0, gamma, ncp_prior)
 
     def fitness(self, a_k, b_k):
         # eq. 41 from Scargle 2012
@@ -510,5 +513,4 @@ class PointMeasures(FitnessFunc):
     def validate_input(self, t, x, sigma):
         if x is None:
             raise ValueError("x must be specified for point measures")
-        return super(PointMeasures, self).validate_input(t, x, sigma)
-
+        return super().validate_input(t, x, sigma)

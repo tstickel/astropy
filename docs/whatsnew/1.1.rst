@@ -2,44 +2,46 @@
 
 .. _whatsnew-1.1:
 
-==========================
+**************************
 What's New in Astropy 1.1?
-==========================
+**************************
 
 Overview
---------
+========
 
 Astropy 1.1 is a major release that adds significant new functionality since
 the 1.0.x series of releases.
 
 In particular, this release includes:
 
-* support for supergalactic and ecliptic coordinates (see
+* Support for supergalactic and ecliptic coordinates (see
   :ref:`whatsnew-1.1-coords`)
-* new functions to automatically determine histogram bins, including the
+* New functions to automatically determine histogram bins, including the
   Bayesian blocks algorithm (see :ref:`whatsnew-1.1-hist`)
-* a new interface to transform between :class:`~astropy.table.Table` objects
+* A new interface to transform between :class:`~astropy.table.Table` objects
   and pandas `DataFrame`_ objects (see :ref:`whatsnew-1.1-pandas`)
-* support for table indexing (see :ref:`whatsnew-1.1-table-indexing`)
-* a new ``info`` attribute to get summary information about tables and
+* Support for table indexing (see :ref:`whatsnew-1.1-table-indexing`)
+* A new ``info`` attribute to get summary information about tables and
   columns (:ref:`whatsnew-1.1-table-info`)
-* support for new units, including logarithmic units such as magnitudes, dex,
+* A new :meth:`~astropy.table.Table.show_in_notebook` method to show a table
+  in Jupyter/IPython notebooks with additional interactivity features
+* Support for new units, including logarithmic units such as magnitudes, dex,
   and decibels (see :ref:`whatsnew-1.1-units`)
-* support for the Planck 2015 cosmology and significant performance
+* Support for the Planck 2015 cosmology and significant performance
   improvements in the cosmology sub-package (see :ref:`whatsnew-1.1-cosmo`).
 
 In addition to these major changes, Astropy 1.1 includes a large number of
 smaller improvements and bug fixes, which are described in the
 :ref:`changelog`. By the numbers:
 
-* 785 issues have been closed since v1.0
-* 459 pull requests have been merged since v1.0
-* 159 distinct people have contributed code
+* 685 issues have been closed since v1.0
+* 408 pull requests have been merged since v1.0
+* 161 distinct people have contributed code
 
 .. _whatsnew-1.1-coords:
 
 New features in celestial coordinates package
----------------------------------------------
+=============================================
 
 The :ref:`astropy-coordinates` sub-package now includes the following new
 coordinate frames:
@@ -67,7 +69,7 @@ used to determine the constellation that a coordinate is in.
 .. _whatsnew-1.1-hist:
 
 Algorithms for choosing histogram bins
---------------------------------------
+======================================
 
 The :ref:`stats` and :ref:`astropy-visualization` sub-packages now include
 functions to help automatically select histogram bins, including reference
@@ -76,13 +78,15 @@ rules such as `Scott's rule
 `Freedman & Diaconis
 <https://en.wikipedia.org/wiki/Freedman%E2%80%93Diaconis_rule>`_'s rule, and
 Bayesian models such as `Knuth's rule
-<http://arxiv.org/abs/physics/0605197>`_ and `Bayesian Blocks
+<https://arxiv.org/abs/physics/0605197>`_ and `Bayesian Blocks
 <http://adsabs.harvard.edu/abs/2012arXiv1207.5578S>`_:
 
 .. plot::
    :align: center
 
+    import warnings
     import numpy as np
+    import matplotlib.pyplot as plt
     from astropy.visualization import hist
 
     # generate some complicated data
@@ -103,8 +107,10 @@ Bayesian models such as `Knuth's rule
     fig.subplots_adjust(left=0.1, right=0.95, bottom=0.15)
     for i, bins in enumerate(['scott', 'freedman', 'knuth', 'blocks']):
         ax = fig.add_subplot(2,2,i+1)
-        hist(t, bins=bins, ax=ax, histtype='stepfilled',
-             alpha=0.4, normed=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')  # Ignore bayesian block p0 warning
+            hist(t, bins=bins, ax=ax, histtype='stepfilled',
+                 alpha=0.4, normed=True)
         ax.set_xlabel('t')
         ax.set_ylabel('P(t)')
         ax.set_title('hist(t, bins="{0}")'.format(bins),
@@ -115,12 +121,12 @@ For more information, see the :ref:`astropy-visualization-hist` section.
 
 
 New features in table package
------------------------------
+=============================
 
 .. _whatsnew-1.1-pandas:
 
 Table interface to Pandas
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 The `pandas <http://pandas.pydata.org/>`__ package is a package for high
 performance data analysis of table-like structures that is complementary to
@@ -168,7 +174,7 @@ For more information, see :ref:`pandas`.
 .. _whatsnew-1.1-table-indexing:
 
 Table indexing
-^^^^^^^^^^^^^^
+--------------
 
 The table sub-package now supports creation of one or more table indices which
 internally sort the rows of the table based on the index column(s).  This
@@ -199,7 +205,7 @@ information, see :ref:`table-indexing`.
 .. _whatsnew-1.1-table-info:
 
 Table and column info
-^^^^^^^^^^^^^^^^^^^^^
+---------------------
 
 The table sub-package now supports a flexible mechanism to return summary
 information about a table and columns.  For the table of ages defined above::
@@ -222,10 +228,25 @@ information about a table and columns.  For the table of ages defined above::
 
 For more information, see :ref:`table-summary-information`.
 
+
+.. _whatsnew-1.1-table-show-in-notebook:
+
+``show_in_notebook`` method
+---------------------------
+
+:class:`~astropy.table.Table` now has a
+:meth:`~astropy.table.Table.show_in_notebook` method that makes viewing tables
+in Jupyter/IPython notebooks more convenient.  Simply call the method at the
+bottom of a cell (or use the :func:`IPython.display.display` function), and the
+output of the cell will show the table with a searchable, sortable, and
+resizable interface similar to what's available by doing
+``tab.show_in_browser(jsviewer=True)``.
+
+
 .. _whatsnew-1.1-units:
 
 New Units
----------
+=========
 
 The :ref:`astropy-units` sub-package now includes support for logarithmic
 units such as magnitudes, decibels, and dex::
@@ -254,7 +275,7 @@ for more details on how to enable this).
 .. _whatsnew-1.1-cosmo:
 
 Improvements to cosmology sub-package
--------------------------------------
+=====================================
 
 The :ref:`astropy-cosmology` sub-package now includes the Planck 2015
 cosmology, and in addition includes significant performance improvements
@@ -262,14 +283,14 @@ cosmology, and in addition includes significant performance improvements
 
 
 Deprecation and backward-incompatible changes
----------------------------------------------
+=============================================
 
 The v1.1.x series of releases will be the last one supporting Python 2.6.
 Starting with Astropy v1.2, Python 2.7 or later will be required.
 
 
 2D Cutout Images
-----------------
+================
 
 The `astropy.nddata.utils` module now includes a
 `~astropy.nddata.utils.Cutout2D` class to create a postage stamp
@@ -283,7 +304,7 @@ optional `~astropy.wcs.WCS` object is input, then the
 For more information, see :ref:`cutout_images`.
 
 Other significant changes
--------------------------
+=========================
 
 The :ref:`astropy-wcs` sub-package now supports (and includes) WCSLIB 5.x,
 which implements support for the distortion representations described in
@@ -297,10 +318,9 @@ The :ref:`astropy-time` sub-package now includes support for time strings
 formatted using the FITS convention, e.g. ``'2000-01-02T03:04:05(TDB)'``.
 
 Full change log
----------------
+===============
 
 To see a detailed list of all changes in version v1.1, including changes in
 API, please see the :ref:`changelog`.
 
-.. _DataFrame: http://pandas.pydata.org/pandas-docs/dev/generated/pandas.DataFrame.html
-
+.. _DataFrame: http://pandas-docs.github.io/pandas-docs-travis/

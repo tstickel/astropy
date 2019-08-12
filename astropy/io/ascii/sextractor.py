@@ -7,7 +7,6 @@ Built on daophot.py:
 :Author: Tom Aldcroft (aldcroft@head.cfa.harvard.edu)
 """
 
-from __future__ import absolute_import, division, print_function
 
 import re
 
@@ -36,14 +35,18 @@ class SExtractorHeader(core.BaseHeader):
         # However, some may be missing and must be inferred from skipped column numbers
         columns = {}
         # E.g. '# 1 ID identification number' (without units) or '# 2 MAGERR magnitude of error [mag]'
-        re_name_def = re.compile(r"""^ \s* \# \s*            # possible whitespace around #
+        # Updated along with issue #4603, for more robust parsing of unit
+        re_name_def = re.compile(r"""^\s* \# \s*             # possible whitespace around #
                                  (?P<colnumber> [0-9]+)\s+   # number of the column in table
                                  (?P<colname> [-\w]+)        # name of the column
-                                 (?:\s+(?P<coldescr> \w [^\[]*\w))? # column description, match non-[
-                                 (?:\s+\[(?P<colunit>.+)\])?.*   # match units in brackets
+                                 (?:\s+(?P<coldescr> \w .+)  # column description, match any character until...
+                                 (?:(?<!(\]))$|(?=(?:(?<=\S)\s+\[.+\]))))?  # ...until [non-space][space][unit] or [not-right-bracket][end]
+                                 (?:\s*\[(?P<colunit>.+)\])?.* # match units in brackets
                                  """, re.VERBOSE)
+        dataline = None
         for line in lines:
             if not line.startswith('#'):
+                dataline = line  # save for later to infer the actual number of columns
                 break                   # End of header lines
             else:
                 match = re_name_def.search(line)
@@ -51,22 +54,33 @@ class SExtractorHeader(core.BaseHeader):
                     colnumber = int(match.group('colnumber'))
                     colname = match.group('colname')
                     coldescr = match.group('coldescr')
-                    colunit = match.group('colunit') # If no units are given, colunit = None
+                    colunit = match.group('colunit')  # If no units are given, colunit = None
                     columns[colnumber] = (colname, coldescr, colunit)
         # Handle skipped column numbers
         colnumbers = sorted(columns)
-        previous_column = 0
-        for n in colnumbers:
-            if n != previous_column + 1:
-                for c in range(previous_column+1, n):
-                    column_name = columns[previous_column][0]+"_%d" % (c-previous_column)
-                    column_descr = columns[previous_column][1]
-                    column_unit = columns[previous_column][2]
-                    columns[c] = (column_name, column_descr, column_unit)
-            previous_column = n
-
+        # Handle the case where the last column is array-like by append a pseudo column
+        # If there are more data columns than the largest column number
+        # then add a pseudo-column that will be dropped later.  This allows
+        # the array column logic below to work in all cases.
+        if dataline is not None:
+            n_data_cols = len(dataline.split())
+        else:
+            n_data_cols = colnumbers[-1]  # handles no data, where we have to rely on the last column number
+        # sextractor column number start at 1.
+        columns[n_data_cols + 1] = (None, None, None)
+        colnumbers.append(n_data_cols + 1)
+        if len(columns) > 1:  # only fill in skipped columns when there is genuine column initially
+            previous_column = 0
+            for n in colnumbers:
+                if n != previous_column + 1:
+                    for c in range(previous_column+1, n):
+                        column_name = columns[previous_column][0]+"_{}".format(c-previous_column)
+                        column_descr = columns[previous_column][1]
+                        column_unit = columns[previous_column][2]
+                        columns[c] = (column_name, column_descr, column_unit)
+                previous_column = n
         # Add the columns in order to self.names
-        colnumbers = sorted(columns)
+        colnumbers = sorted(columns)[:-1]  # drop the pseudo column
         self.names = []
         for n in colnumbers:
             self.names.append(columns[n][0])
@@ -83,16 +97,18 @@ class SExtractorHeader(core.BaseHeader):
 
 
 class SExtractorData(core.BaseData):
-        start_line = 0
-        delimiter = ' '
-        comment = r'\s*#'
+    start_line = 0
+    delimiter = ' '
+    comment = r'\s*#'
 
 
 class SExtractor(core.BaseReader):
-    """Read a SExtractor file.
-       SExtractor is a package for faint-galaxy photometry.
-       Bertin & Arnouts 1996, A&A Supp. 317, 393.
-       http://www.astromatic.net/software/sextractor
+    """SExtractor format table.
+
+    SExtractor is a package for faint-galaxy photometry (Bertin & Arnouts
+    1996, A&A Supp. 317, 393.)
+
+    See: http://www.astromatic.net/software/sextractor
 
     Example::
 
@@ -107,10 +123,11 @@ class SExtractor(core.BaseReader):
       1 32.23222 10.1211 0.8 1.2 1.4 18.1 1000.0 0.00304 -3.498
       2 38.12321 -88.1321 2.2 2.4 3.1 17.0 1500.0 0.00908 1.401
 
-    Note the skipped numbers since flux_radius has 3 columns.  The three FLUX_RADIUS
-    columns will be named FLUX_RADIUS, FLUX_RADIUS_1, FLUX_RADIUS_2
-    Also note that a post-ID description (e.g. "Variance along x") is
-    optional and that units may be specified at the end of a line in brackets.
+    Note the skipped numbers since flux_radius has 3 columns.  The three
+    FLUX_RADIUS columns will be named FLUX_RADIUS, FLUX_RADIUS_1, FLUX_RADIUS_2
+    Also note that a post-ID description (e.g. "Variance along x") is optional
+    and that units may be specified at the end of a line in brackets.
+
     """
     _format_name = 'sextractor'
     _io_registry_can_write = False
@@ -119,6 +136,17 @@ class SExtractor(core.BaseReader):
     header_class = SExtractorHeader
     data_class = SExtractorData
     inputter_class = core.ContinuationLinesInputter
+
+    def read(self, table):
+        """
+        Read input data (file-like object, filename, list of strings, or
+        single string) into a Table and return the result.
+        """
+        out = super().read(table)
+        # remove the comments
+        if 'comments' in out.meta:
+            del out.meta['comments']
+        return out
 
     def write(self, table):
         raise NotImplementedError

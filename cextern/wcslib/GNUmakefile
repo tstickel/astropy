@@ -1,5 +1,5 @@
 #-----------------------------------------------------------------------------
-# GNU makefile for building WCSLIB 5.10
+# GNU makefile for building WCSLIB 6.2
 #
 # Summary of the main targets
 # ---------------------------
@@ -32,9 +32,10 @@
 #
 # Author: Mark Calabretta, Australia Telescope National Facility, CSIRO.
 # http://www.atnf.csiro.au/people/Mark.Calabretta
-# $Id: GNUmakefile,v 5.10 2015/10/09 08:19:17 mcalabre Exp $
+# $Id: GNUmakefile,v 6.2 2018/10/20 10:03:14 mcalabre Exp $
 #-----------------------------------------------------------------------------
 # Get configure settings.
+SUBDIR := .
 include makedefs
 
 ifeq "$(CHECK)" "nopgplot"
@@ -56,7 +57,7 @@ check tests :: show
 	-@ $(TIMER)
 	 @ for DIR in $(SUBDIRS) ; do \
 	     echo '' ; \
-	     $(MAKE) -i -C $$DIR cleaner ; \
+	     $(MAKE) -i -C $$DIR cleaner build ; \
 	   done
 	-@ echo ''
 	 @ for DIR in $(TSTDIRS) ; do \
@@ -82,7 +83,7 @@ install :
 	   done
 	   $(INSTALL) -m 444 wcsconfig.h wcsconfig_f77.h $(INCDIR)
 	-  if [ ! -d "$(DOCDIR)" ] ; then \
-	     $(INSTALL) -d -m 2775 $(DOCDIR) ; \
+	     $(INSTALL) -d -m 775 $(DOCDIR) ; \
 	   fi
 	   $(INSTALL) -m 444 CHANGES COPYING* README $(DOCDIR)
 	-  if [ -h $(DOCLINK) ] ; then \
@@ -90,15 +91,15 @@ install :
 	     $(LN_S) $(notdir $(DOCDIR)) $(DOCLINK) ; \
 	   fi
 	-  if [ ! -d "$(PDFDIR)" ] ; then \
-	     $(INSTALL) -d -m 2775 $(PDFDIR) ; \
+	     $(INSTALL) -d -m 775 $(PDFDIR) ; \
 	   fi
 	   $(INSTALL) -m 444 wcslib.pdf $(PDFDIR)
 	-  if [ ! -d "$(HTMLDIR)/html" ] ; then \
-	     $(INSTALL) -d -m 2775 $(HTMLDIR)/html ; \
+	     $(INSTALL) -d -m 775 $(HTMLDIR)/html ; \
 	   fi
 	   $(INSTALL) -m 444 html/* $(HTMLDIR)/html
 	   if [ ! -d "$(LIBDIR)/pkgconfig" ] ; then \
-	     $(INSTALL) -d -m 2775 $(LIBDIR)/pkgconfig ; \
+	     $(INSTALL) -d -m 775 $(LIBDIR)/pkgconfig ; \
 	   fi
 	   $(INSTALL) -m 444 wcslib.pc $(LIBDIR)/pkgconfig/wcslib.pc
 
@@ -147,6 +148,7 @@ config.status : configure
 	-@ echo "  CPPFLAGS = $${CPPFLAGS-(undefined)}"
 	-@ echo "  F77      = $${F77-(undefined)}"
 	-@ echo "  FFLAGS   = $${FFLAGS-(undefined)}"
+	-@ echo "  ARFLAGS  = $${ARFLAGS-(undefined)}"
 	-@ echo "  LDFLAGS  = $${LDFLAGS-(undefined)}"
 	-@ echo ''
 	   ./configure --no-create

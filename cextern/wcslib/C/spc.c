@@ -1,7 +1,7 @@
 /*============================================================================
 
-  WCSLIB 5.10 - an implementation of the FITS WCS standard.
-  Copyright (C) 1995-2015, Mark Calabretta
+  WCSLIB 6.2 - an implementation of the FITS WCS standard.
+  Copyright (C) 1995-2018, Mark Calabretta
 
   This file is part of WCSLIB.
 
@@ -22,7 +22,7 @@
 
   Author: Mark Calabretta, Australia Telescope National Facility, CSIRO.
   http://www.atnf.csiro.au/people/Mark.Calabretta
-  $Id: spc.c,v 5.10 2015/10/09 08:19:15 mcalabre Exp $
+  $Id: spc.c,v 6.2 2018/10/20 10:03:13 mcalabre Exp $
 *===========================================================================*/
 
 #include <math.h>
@@ -207,13 +207,13 @@ int spcprt(const struct spcprm *spc)
   }
 
   wcsprintf("     spxX2P: %s\n",
-    wcsutil_fptr2str((int (*)(void))spc->spxX2P, hext));
+    wcsutil_fptr2str((void (*)(void))spc->spxX2P, hext));
   wcsprintf("     spxP2S: %s\n",
-    wcsutil_fptr2str((int (*)(void))spc->spxP2S, hext));
+    wcsutil_fptr2str((void (*)(void))spc->spxP2S, hext));
   wcsprintf("     spxS2P: %s\n",
-    wcsutil_fptr2str((int (*)(void))spc->spxS2P, hext));
+    wcsutil_fptr2str((void (*)(void))spc->spxS2P, hext));
   wcsprintf("     spxP2X: %s\n",
-    wcsutil_fptr2str((int (*)(void))spc->spxP2X, hext));
+    wcsutil_fptr2str((void (*)(void))spc->spxP2X, hext));
 
   return 0;
 }

@@ -4,13 +4,10 @@
 Handles the "LaTeX" unit format.
 """
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
 
 import numpy as np
 
 from . import base, core, utils
-from ...extern.six.moves import zip
 
 
 class Latex(base.Base):
@@ -18,7 +15,7 @@ class Latex(base.Base):
     Output LaTeX to display the unit based on IAU style guidelines.
 
     Attempts to follow the `IAU Style Manual
-    <http://www.iau.org/static/publications/stylemanual1989.pdf>`_.
+    <https://www.iau.org/static/publications/stylemanual1989.pdf>`_.
     """
 
     @classmethod
@@ -58,7 +55,7 @@ class Latex(base.Base):
             else:
                 positives = '1'
             negatives = cls._format_unit_list(negatives)
-            s = r'\frac{{{0}}}{{{1}}}'.format(positives, negatives)
+            s = fr'\frac{{{positives}}}{{{negatives}}}'
         else:
             positives = cls._format_unit_list(positives)
             s = positives
@@ -85,10 +82,10 @@ class Latex(base.Base):
         elif isinstance(unit, core.NamedUnit):
             s = cls._latex_escape(unit.name)
 
-        return r'$\mathrm{{{0}}}$'.format(s)
+        return fr'$\mathrm{{{s}}}$'
 
     @classmethod
-    def format_exponential_notation(cls, val):
+    def format_exponential_notation(cls, val, format_spec=".8g"):
         """
         Formats a value in exponential notation for LaTeX.
 
@@ -97,30 +94,34 @@ class Latex(base.Base):
         val : number
             The value to be formatted
 
+        format_spec : str, optional
+            Format used to split up mantissa and exponent
+
         Returns
         -------
         latex_string : str
             The value in exponential notation in a format suitable for LaTeX.
         """
         if np.isfinite(val):
-            m, ex = utils.split_mantissa_exponent(val)
+            m, ex = utils.split_mantissa_exponent(val, format_spec)
 
             parts = []
             if m:
                 parts.append(m)
             if ex:
-                parts.append("10^{{{0}}}".format(ex))
+                parts.append(f"10^{{{ex}}}")
 
             return r" \times ".join(parts)
         else:
             if np.isnan(val):
                 return r'{\rm NaN}'
             elif val > 0:
-                #positive infinity
+                # positive infinity
                 return r'\infty'
             else:
-                #negative infinity
+                # negative infinity
                 return r'-\infty'
+
 
 class LatexInline(Latex):
     """
@@ -128,9 +129,9 @@ class LatexInline(Latex):
     powers.
 
     Attempts to follow the `IAU Style Manual
-    <http://www.iau.org/static/publications/stylemanual1989.pdf>`_ and the
+    <https://www.iau.org/static/publications/stylemanual1989.pdf>`_ and the
     `ApJ and AJ style guide
-    <http://aas.org/authors/manuscript-preparation-aj-apj-author-instructions>`_.
+    <https://journals.aas.org/manuscript-preparation/>`_.
     """
     name = 'latex_inline'
 

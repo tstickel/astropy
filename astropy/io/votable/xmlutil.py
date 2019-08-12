@@ -3,13 +3,12 @@
 Various XML-related utilities
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 # ASTROPY
-from ...logger import log
-from ...utils import data
-from ...utils.xml import check as xml_check
-from ...utils.xml import validate
+from astropy.logger import log
+from astropy.utils import data
+from astropy.utils.xml import check as xml_check
+from astropy.utils.xml import validate
 
 # LOCAL
 from .exceptions import (warn_or_raise, vo_warn, W02, W03, W04, W05)
@@ -55,7 +54,7 @@ _token_regex = r"(?![\r\l\t ])[^\r\l\t]*(?![\r\l\t ])"
 
 def check_token(token, attr_name, config=None, pos=None):
     """
-    Raises a `~.exceptions.ValueError` if *token* is not a valid XML token.
+    Raises a `ValueError` if *token* is not a valid XML token.
 
     As defined by XML Schema Part 2.
     """
@@ -115,13 +114,13 @@ def validate_schema(filename, version='1.1'):
         as strings
     """
     if version not in ('1.0', '1.1', '1.2', '1.3'):
-        log.info('{0} has version {1}, using schema 1.1'.format(
+        log.info('{} has version {}, using schema 1.1'.format(
             filename, version))
         version = '1.1'
 
     if version in ('1.1', '1.2', '1.3'):
         schema_path = data.get_pkg_data_filename(
-            'data/VOTable.v{0}.xsd'.format(version))
+            f'data/VOTable.v{version}.xsd')
     else:
         schema_path = data.get_pkg_data_filename(
             'data/VOTable.dtd')

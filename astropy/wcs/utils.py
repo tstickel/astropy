@@ -1,19 +1,19 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import numpy as np
-import warnings
-from .. import units as u
-from ..utils.exceptions import AstropyUserWarning
 
-__doctest_skip__ = ['wcs_to_celestial_frame']
+from astropy import units as u
 
-__all__ = ['add_stokes_axis_to_wcs',
-           'custom_frame_mappings',
+from .wcs import WCS, WCSSUB_LONGITUDE, WCSSUB_LATITUDE, WCSSUB_CELESTIAL
+
+__doctest_skip__ = ['wcs_to_celestial_frame', 'celestial_frame_to_wcs']
+
+__all__ = ['add_stokes_axis_to_wcs', 'celestial_frame_to_wcs',
            'wcs_to_celestial_frame', 'proj_plane_pixel_scales',
            'proj_plane_pixel_area', 'is_proj_plane_distorted',
            'non_celestial_pixel_scales', 'skycoord_to_pixel',
-           'pixel_to_skycoord']
+           'pixel_to_skycoord', 'custom_wcs_to_frame_mappings',
+           'custom_frame_to_wcs_mappings']
 
 
 def add_stokes_axis_to_wcs(wcs, add_before_ind):
@@ -44,12 +44,11 @@ def add_stokes_axis_to_wcs(wcs, add_before_ind):
 
 def _wcs_to_celestial_frame_builtin(wcs):
 
-    from ..coordinates import FK4, FK4NoETerms, FK5, ICRS, Galactic
-    from ..time import Time
-    from . import WCSSUB_CELESTIAL
+    # Import astropy.coordinates here to avoid circular imports
+    from astropy.coordinates import FK4, FK4NoETerms, FK5, ICRS, ITRS, Galactic
 
-    # Keep only the celestial part of the axes
-    wcs = wcs.sub([WCSSUB_CELESTIAL])
+    # Import astropy.time here otherwise setup.py fails before extensions are compiled
+    from astropy.time import Time
 
     if wcs.wcs.lng == -1 or wcs.wcs.lat == -1:
         return None
@@ -61,8 +60,8 @@ def _wcs_to_celestial_frame_builtin(wcs):
     else:
         equinox = wcs.wcs.equinox
 
-    xcoord = wcs.wcs.ctype[0][:4]
-    ycoord = wcs.wcs.ctype[1][:4]
+    xcoord = wcs.wcs.ctype[wcs.wcs.lng][:4]
+    ycoord = wcs.wcs.ctype[wcs.wcs.lat][:4]
 
     # Apply logic from FITS standard to determine the default radesys
     if radesys == '' and xcoord == 'RA--' and ycoord == 'DEC-':
@@ -90,16 +89,60 @@ def _wcs_to_celestial_frame_builtin(wcs):
     else:
         if xcoord == 'GLON' and ycoord == 'GLAT':
             frame = Galactic()
+        elif xcoord == 'TLON' and ycoord == 'TLAT':
+            frame = ITRS(obstime=wcs.wcs.dateobs or None)
         else:
             frame = None
 
     return frame
 
 
+def _celestial_frame_to_wcs_builtin(frame, projection='TAN'):
+
+    # Import astropy.coordinates here to avoid circular imports
+    from astropy.coordinates import BaseRADecFrame, FK4, FK4NoETerms, FK5, ICRS, ITRS, Galactic
+
+    # Create a 2-dimensional WCS
+    wcs = WCS(naxis=2)
+
+    if isinstance(frame, BaseRADecFrame):
+
+        xcoord = 'RA--'
+        ycoord = 'DEC-'
+        if isinstance(frame, ICRS):
+            wcs.wcs.radesys = 'ICRS'
+        elif isinstance(frame, FK4NoETerms):
+            wcs.wcs.radesys = 'FK4-NO-E'
+            wcs.wcs.equinox = frame.equinox.byear
+        elif isinstance(frame, FK4):
+            wcs.wcs.radesys = 'FK4'
+            wcs.wcs.equinox = frame.equinox.byear
+        elif isinstance(frame, FK5):
+            wcs.wcs.radesys = 'FK5'
+            wcs.wcs.equinox = frame.equinox.jyear
+        else:
+            return None
+    elif isinstance(frame, Galactic):
+        xcoord = 'GLON'
+        ycoord = 'GLAT'
+    elif isinstance(frame, ITRS):
+        xcoord = 'TLON'
+        ycoord = 'TLAT'
+        wcs.wcs.radesys = 'ITRS'
+        wcs.wcs.dateobs = frame.obstime.utc.isot
+    else:
+        return None
+
+    wcs.wcs.ctype = [xcoord + '-' + projection, ycoord + '-' + projection]
+
+    return wcs
+
+
 WCS_FRAME_MAPPINGS = [[_wcs_to_celestial_frame_builtin]]
+FRAME_WCS_MAPPINGS = [[_celestial_frame_to_wcs_builtin]]
 
 
-class custom_frame_mappings(object):
+class custom_wcs_to_frame_mappings:
     def __init__(self, mappings=[]):
         if hasattr(mappings, '__call__'):
             mappings = [mappings]
@@ -110,6 +153,23 @@ class custom_frame_mappings(object):
 
     def __exit__(self, type, value, tb):
         WCS_FRAME_MAPPINGS.pop()
+
+
+# Backward-compatibility
+custom_frame_mappings = custom_wcs_to_frame_mappings
+
+
+class custom_frame_to_wcs_mappings:
+    def __init__(self, mappings=[]):
+        if hasattr(mappings, '__call__'):
+            mappings = [mappings]
+        FRAME_WCS_MAPPINGS.append(mappings)
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, type, value, tb):
+        FRAME_WCS_MAPPINGS.pop()
 
 
 def wcs_to_celestial_frame(wcs):
@@ -136,8 +196,8 @@ def wcs_to_celestial_frame(wcs):
     instance and should return either an instance of a frame, or `None` if no
     matching frame was found. You can register this function temporarily with::
 
-        >>> from astropy.wcs.utils import wcs_to_celestial_frame, custom_frame_mappings
-        >>> with custom_frame_mappings(my_function):
+        >>> from astropy.wcs.utils import wcs_to_celestial_frame, custom_wcs_to_frame_mappings
+        >>> with custom_wcs_to_frame_mappings(my_function):
         ...     wcs_to_celestial_frame(...)
 
     """
@@ -148,6 +208,77 @@ def wcs_to_celestial_frame(wcs):
                 return frame
     raise ValueError("Could not determine celestial frame corresponding to "
                      "the specified WCS object")
+
+
+def celestial_frame_to_wcs(frame, projection='TAN'):
+    """
+    For a given coordinate frame, return the corresponding WCS object.
+
+    Note that the returned WCS object has only the elements corresponding to
+    coordinate frames set (e.g. ctype, equinox, radesys).
+
+    Parameters
+    ----------
+    frame : :class:`~astropy.coordinates.baseframe.BaseCoordinateFrame` subclass instance
+        An instance of a :class:`~astropy.coordinates.baseframe.BaseCoordinateFrame`
+        subclass instance for which to find the WCS
+    projection : str
+        Projection code to use in ctype, if applicable
+
+    Returns
+    -------
+    wcs : :class:`~astropy.wcs.WCS` instance
+        The corresponding WCS object
+
+    Examples
+    --------
+
+    ::
+
+        >>> from astropy.wcs.utils import celestial_frame_to_wcs
+        >>> from astropy.coordinates import FK5
+        >>> frame = FK5(equinox='J2010')
+        >>> wcs = celestial_frame_to_wcs(frame)
+        >>> wcs.to_header()
+        WCSAXES =                    2 / Number of coordinate axes
+        CRPIX1  =                  0.0 / Pixel coordinate of reference point
+        CRPIX2  =                  0.0 / Pixel coordinate of reference point
+        CDELT1  =                  1.0 / [deg] Coordinate increment at reference point
+        CDELT2  =                  1.0 / [deg] Coordinate increment at reference point
+        CUNIT1  = 'deg'                / Units of coordinate increment and value
+        CUNIT2  = 'deg'                / Units of coordinate increment and value
+        CTYPE1  = 'RA---TAN'           / Right ascension, gnomonic projection
+        CTYPE2  = 'DEC--TAN'           / Declination, gnomonic projection
+        CRVAL1  =                  0.0 / [deg] Coordinate value at reference point
+        CRVAL2  =                  0.0 / [deg] Coordinate value at reference point
+        LONPOLE =                180.0 / [deg] Native longitude of celestial pole
+        LATPOLE =                  0.0 / [deg] Native latitude of celestial pole
+        RADESYS = 'FK5'                / Equatorial coordinate system
+        EQUINOX =               2010.0 / [yr] Equinox of equatorial coordinates
+
+
+    Notes
+    -----
+
+    To extend this function to frames not defined in astropy.coordinates, you
+    can write your own function which should take a
+    :class:`~astropy.coordinates.baseframe.BaseCoordinateFrame` subclass
+    instance and a projection (given as a string) and should return either a WCS
+    instance, or `None` if the WCS could not be determined. You can register
+    this function temporarily with::
+
+        >>> from astropy.wcs.utils import celestial_frame_to_wcs, custom_frame_to_wcs_mappings
+        >>> with custom_frame_to_wcs_mappings(my_function):
+        ...     celestial_frame_to_wcs(...)
+
+    """
+    for mapping_set in FRAME_WCS_MAPPINGS:
+        for func in mapping_set:
+            wcs = func(frame, projection=projection)
+            if wcs is not None:
+                return wcs
+    raise ValueError("Could not determine WCS corresponding to the specified "
+                     "coordinate frame.")
 
 
 def proj_plane_pixel_scales(wcs):
@@ -191,7 +322,7 @@ def proj_plane_pixel_scales(wcs):
     astropy.wcs.utils.proj_plane_pixel_area
 
     """
-    return np.sqrt((wcs.pixel_scale_matrix**2).sum(axis=0, dtype=np.float))
+    return np.sqrt((wcs.pixel_scale_matrix**2).sum(axis=0, dtype=float))
 
 
 def proj_plane_pixel_area(wcs):
@@ -256,7 +387,7 @@ def proj_plane_pixel_area(wcs):
 
 
 def is_proj_plane_distorted(wcs, maxerr=1.0e-5):
-    """
+    r"""
     For a WCS returns `False` if square image (detector) pixels stay square
     when projected onto the "plane of intermediate world coordinates"
     as defined in
@@ -279,8 +410,8 @@ def is_proj_plane_distorted(wcs, maxerr=1.0e-5):
     check:
 
     .. math::
-        \\left \| \\frac{C \cdot C^{\mathrm{T}}}\
-        {| det(C)|} - I \\right \|_{\mathrm{max}} < \epsilon .
+        \left \| \frac{C \cdot C^{\mathrm{T}}}
+        {| det(C)|} - I \right \|_{\mathrm{max}} < \epsilon .
 
     Parameters
     ----------
@@ -324,18 +455,18 @@ def _is_cd_orthogonal(cd, maxerr):
 
 def non_celestial_pixel_scales(inwcs):
     """
-    For a non-celestial WCS, e.g. one with mixed spectral and spatial axes, it
-    is still sometimes possible to define a pixel scale.
+    Calculate the pixel scale along each axis of a non-celestial WCS,
+    for example one with mixed spectral and spatial axes.
 
     Parameters
     ----------
     inwcs : `~astropy.wcs.WCS`
-        The world coordinate system object
+        The world coordinate system object.
 
     Returns
     -------
     scale : `numpy.ndarray`
-        The pixel scale along each axis
+        The pixel scale along each axis.
     """
 
     if inwcs.is_celestial:
@@ -386,14 +517,11 @@ def skycoord_to_pixel(coords, wcs, origin=0, mode='all'):
     astropy.coordinates.SkyCoord.from_pixel
     """
 
-    from .. import units as u
-    from . import WCSSUB_CELESTIAL
-
     if _has_distortion(wcs) and wcs.naxis != 2:
         raise ValueError("Can only handle WCS with distortions for 2-dimensional WCS")
 
     # Keep only the celestial part of the axes, also re-orders lon/lat
-    wcs = wcs.sub([WCSSUB_CELESTIAL])
+    wcs = wcs.sub([WCSSUB_LONGITUDE, WCSSUB_LATITUDE])
 
     if wcs.naxis != 2:
         raise ValueError("WCS should contain celestial component")
@@ -462,9 +590,8 @@ def pixel_to_skycoord(xp, yp, wcs, origin=0, mode='all', cls=None):
     astropy.coordinates.SkyCoord.from_pixel
     """
 
-    from .. import units as u
-    from . import WCSSUB_CELESTIAL
-    from ..coordinates import SkyCoord, UnitSphericalRepresentation
+    # Import astropy.coordinates here to avoid circular imports
+    from astropy.coordinates import SkyCoord, UnitSphericalRepresentation
 
     # we have to do this instead of actually setting the default to SkyCoord
     # because importing SkyCoord at the module-level leads to circular
@@ -476,7 +603,7 @@ def pixel_to_skycoord(xp, yp, wcs, origin=0, mode='all', cls=None):
         raise ValueError("Can only handle WCS with distortions for 2-dimensional WCS")
 
     # Keep only the celestial part of the axes, also re-orders lon/lat
-    wcs = wcs.sub([WCSSUB_CELESTIAL])
+    wcs = wcs.sub([WCSSUB_LONGITUDE, WCSSUB_LATITUDE])
 
     if wcs.naxis != 2:
         raise ValueError("WCS should contain celestial component")

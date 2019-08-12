@@ -2,19 +2,17 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """Separate tests specifically for equivalencies."""
 
-from __future__ import (absolute_import, unicode_literals, division,
-                        print_function)
-
-from ...extern.six.moves import zip
-
 # THIRD-PARTY
+import pytest
 import numpy as np
-from numpy.testing.utils import assert_allclose
+from numpy.testing import assert_allclose
 
 # LOCAL
-from ... import units as u
-from ... import constants
-from ...tests.helper import pytest
+from astropy import units as u
+from astropy.units.equivalencies import Equivalency
+from astropy import constants, cosmology
+from astropy.tests.helper import assert_quantity_allclose, catch_warnings
+from astropy.utils.exceptions import AstropyDeprecationWarning
 
 
 def test_dimensionless_angles():
@@ -26,24 +24,24 @@ def test_dimensionless_angles():
     assert u.steradian.to(1, equivalencies=rad1) == 1.
     assert u.dimensionless_unscaled.to(u.steradian, equivalencies=rad1) == 1.
     # now quantities
-    assert (1.*u.radian).to(1, equivalencies=rad1).value == 1.
-    assert (1.*u.deg).to(1, equivalencies=rad1).value == u.deg.to(u.rad)
-    assert (1.*u.steradian).to(1, equivalencies=rad1).value == 1.
+    assert (1.*u.radian).to_value(1, equivalencies=rad1) == 1.
+    assert (1.*u.deg).to_value(1, equivalencies=rad1) == u.deg.to(u.rad)
+    assert (1.*u.steradian).to_value(1, equivalencies=rad1) == 1.
     # more complicated example
-    I = 1.e45 * u.g * u.cm**2
+    I = 1.e45 * u.g * u.cm**2  # noqa
     Omega = u.cycle / (1.*u.s)
     Erot = 0.5 * I * Omega**2
     # check that equivalency makes this work
     Erot_in_erg1 = Erot.to(u.erg, equivalencies=rad1)
     # and check that value is correct
-    assert_allclose(Erot_in_erg1.value, (Erot/u.radian**2).to(u.erg).value)
+    assert_allclose(Erot_in_erg1.value, (Erot/u.radian**2).to_value(u.erg))
 
     # test build-in equivalency in subclass
     class MyRad1(u.Quantity):
         _equivalencies = rad1
 
     phase = MyRad1(1., u.cycle)
-    assert phase.to(1).value == u.cycle.to(u.radian)
+    assert phase.to_value(1) == u.cycle.to(u.radian)
 
 
 @pytest.mark.parametrize('log_unit', (u.mag, u.dex, u.dB))
@@ -92,7 +90,7 @@ def test_doppler_wavelength_0(function):
 @pytest.mark.parametrize(('function'), doppler_functions)
 def test_doppler_energy_0(function):
     rest = 105.01 * u.GHz
-    q1 = 0.000434286445543 * u.eV
+    q1 = 0.0004342864648539744 * u.eV
     velo0 = q1.to(u.km/u.s, equivalencies=function(rest))
     np.testing.assert_almost_equal(velo0.value, 0, decimal=6)
 
@@ -124,7 +122,9 @@ def test_doppler_energy_circle(function):
     np.testing.assert_almost_equal(en.value, shifted.value, decimal=7)
 
 
-values_ghz = (999.899940784289,999.8999307714406,999.8999357778647)
+values_ghz = (999.899940784289, 999.8999307714406, 999.8999357778647)
+
+
 @pytest.mark.parametrize(('function', 'value'),
                          list(zip(doppler_functions, values_ghz)))
 def test_30kms(function, value):
@@ -135,11 +135,14 @@ def test_30kms(function, value):
 
 
 bad_values = (5, 5*u.Jy, None)
+
+
 @pytest.mark.parametrize(('function', 'value'),
                          list(zip(doppler_functions, bad_values)))
 def test_bad_restfreqs(function, value):
     with pytest.raises(u.UnitsError):
         function(value)
+
 
 def test_massenergy():
     # The relative tolerance of these tests is set by the uncertainties
@@ -157,40 +160,40 @@ def test_massenergy():
     mass_g = u.Quantity([9.10938291e-28, 1.672621777e-24, 1.674927351e-24,
                          1.88353147e-25, 1], u.g)
     # Test both ways
-    assert np.allclose(mass_eV.to(u.g, equivalencies=u.mass_energy()).value,
+    assert np.allclose(mass_eV.to_value(u.g, equivalencies=u.mass_energy()),
                        mass_g.value, rtol=1e-7)
-    assert np.allclose(mass_g.to(u.eV, equivalencies=u.mass_energy()).value,
+    assert np.allclose(mass_g.to_value(u.eV, equivalencies=u.mass_energy()),
                        mass_eV.value, rtol=1e-7)
 
     # Basic tests of 'derived' equivalencies
     # Surface density
     sdens_eV = u.Quantity(5.60958884539e32, u.eV / u.m**2)
     sdens_g = u.Quantity(1e-4, u.g / u.cm**2)
-    assert np.allclose(sdens_eV.to(u.g / u.cm**2,
-                                   equivalencies=u.mass_energy()).value,
+    assert np.allclose(sdens_eV.to_value(u.g / u.cm**2,
+                                         equivalencies=u.mass_energy()),
                        sdens_g.value, rtol=1e-7)
-    assert np.allclose(sdens_g.to(u.eV / u.m**2,
-                                  equivalencies=u.mass_energy()).value,
+    assert np.allclose(sdens_g.to_value(u.eV / u.m**2,
+                                        equivalencies=u.mass_energy()),
                        sdens_eV.value, rtol=1e-7)
 
     # Density
     dens_eV = u.Quantity(5.60958884539e32, u.eV / u.m**3)
     dens_g = u.Quantity(1e-6, u.g / u.cm**3)
-    assert np.allclose(dens_eV.to(u.g / u.cm**3,
-                                   equivalencies=u.mass_energy()).value,
+    assert np.allclose(dens_eV.to_value(u.g / u.cm**3,
+                                        equivalencies=u.mass_energy()),
                        dens_g.value, rtol=1e-7)
-    assert np.allclose(dens_g.to(u.eV / u.m**3,
-                                  equivalencies=u.mass_energy()).value,
+    assert np.allclose(dens_g.to_value(u.eV / u.m**3,
+                                       equivalencies=u.mass_energy()),
                        dens_eV.value, rtol=1e-7)
 
     # Power
     pow_eV = u.Quantity(5.60958884539e32, u.eV / u.s)
     pow_g = u.Quantity(1, u.g / u.s)
-    assert np.allclose(pow_eV.to(u.g / u.s,
-                                   equivalencies=u.mass_energy()).value,
+    assert np.allclose(pow_eV.to_value(u.g / u.s,
+                                       equivalencies=u.mass_energy()),
                        pow_g.value, rtol=1e-7)
-    assert np.allclose(pow_g.to(u.eV / u.s,
-                                  equivalencies=u.mass_energy()).value,
+    assert np.allclose(pow_g.to_value(u.eV / u.s,
+                                      equivalencies=u.mass_energy()),
                        pow_eV.value, rtol=1e-7)
 
 
@@ -224,6 +227,12 @@ def test_parallax():
     assert_allclose(a, 3437.7467916)
     b = u.au.to(u.arcminute, a, u.parallax())
     assert_allclose(b, 1)
+
+    val = (-1 * u.mas).to(u.pc, u.parallax())
+    assert np.isnan(val.value)
+
+    val = (-1 * u.mas).to_value(u.pc, u.parallax())
+    assert np.isnan(val)
 
 
 def test_parallax2():
@@ -291,11 +300,22 @@ def test_spectral4(in_val, in_unit):
 
 
 def test_spectraldensity2():
+    # flux density
     flambda = u.erg / u.angstrom / u.cm ** 2 / u.s
     fnu = u.erg / u.Hz / u.cm ** 2 / u.s
 
     a = flambda.to(fnu, 1, u.spectral_density(u.Quantity(3500, u.AA)))
     assert_allclose(a, 4.086160166177361e-12)
+
+    # luminosity density
+    llambda = u.erg / u.angstrom / u.s
+    lnu = u.erg / u.Hz / u.s
+
+    a = llambda.to(lnu, 1, u.spectral_density(u.Quantity(3500, u.AA)))
+    assert_allclose(a, 4.086160166177361e-12)
+
+    a = lnu.to(llambda, 1, u.spectral_density(u.Quantity(3500, u.AA)))
+    assert_allclose(a, 2.44728537142857e11)
 
 
 def test_spectraldensity3():
@@ -345,6 +365,8 @@ def test_spectraldensity4():
     flux_flam = [3.9135e-14, 4.0209e-14, 3.9169e-14]
     flux_fnu = [3.20735792e-25, 3.29903646e-25, 3.21727226e-25]
     flux_jy = [3.20735792e-2, 3.29903646e-2, 3.21727226e-2]
+    flux_stmag = [12.41858665, 12.38919182, 12.41764379]
+    flux_abmag = [12.63463143, 12.60403221, 12.63128047]
 
     # PHOTLAM <--> FLAM
     assert_allclose(photlam.to(
@@ -382,15 +404,72 @@ def test_spectraldensity4():
     assert_allclose(flam.to(
         photnu, flux_flam, u.spectral_density(wave)), flux_photnu, rtol=1e-6)
 
+    # PHOTLAM <--> STMAG
+    assert_allclose(photlam.to(
+        u.STmag, flux_photlam, u.spectral_density(wave)), flux_stmag, rtol=1e-6)
+    assert_allclose(u.STmag.to(
+        photlam, flux_stmag, u.spectral_density(wave)), flux_photlam, rtol=1e-6)
+
+    # PHOTLAM <--> ABMAG
+    assert_allclose(photlam.to(
+        u.ABmag, flux_photlam, u.spectral_density(wave)), flux_abmag, rtol=1e-6)
+    assert_allclose(u.ABmag.to(
+        photlam, flux_abmag, u.spectral_density(wave)), flux_photlam, rtol=1e-6)
+
+
+def test_spectraldensity5():
+    """ Test photon luminosity density conversions. """
+    L_la = u.erg / (u.s * u.AA)
+    L_nu = u.erg / (u.s * u.Hz)
+    phot_L_la = u.photon / (u.s * u.AA)
+    phot_L_nu = u.photon / (u.s * u.Hz)
+
+    wave = u.Quantity([4956.8, 4959.55, 4962.3], u.AA)
+    flux_phot_L_la = [9.7654e-3, 1.003896e-2, 9.78473e-3]
+    flux_phot_L_nu = [8.00335589e-14, 8.23668949e-14, 8.03700310e-14]
+    flux_L_la = [3.9135e-14, 4.0209e-14, 3.9169e-14]
+    flux_L_nu = [3.20735792e-25, 3.29903646e-25, 3.21727226e-25]
+
+    # PHOTLAM <--> FLAM
+    assert_allclose(phot_L_la.to(
+        L_la, flux_phot_L_la, u.spectral_density(wave)), flux_L_la, rtol=1e-6)
+    assert_allclose(L_la.to(
+        phot_L_la, flux_L_la, u.spectral_density(wave)), flux_phot_L_la, rtol=1e-6)
+
+    # PHOTLAM <--> FNU
+    assert_allclose(phot_L_la.to(
+        L_nu, flux_phot_L_la, u.spectral_density(wave)), flux_L_nu, rtol=1e-6)
+    assert_allclose(L_nu.to(
+        phot_L_la, flux_L_nu, u.spectral_density(wave)), flux_phot_L_la, rtol=1e-6)
+
+    # PHOTLAM <--> PHOTNU
+    assert_allclose(phot_L_la.to(
+        phot_L_nu, flux_phot_L_la, u.spectral_density(wave)), flux_phot_L_nu, rtol=1e-6)
+    assert_allclose(phot_L_nu.to(
+        phot_L_la, flux_phot_L_nu, u.spectral_density(wave)), flux_phot_L_la, rtol=1e-6)
+
+    # PHOTNU <--> FNU
+    assert_allclose(phot_L_nu.to(
+        L_nu, flux_phot_L_nu, u.spectral_density(wave)), flux_L_nu, rtol=1e-6)
+    assert_allclose(L_nu.to(
+        phot_L_nu, flux_L_nu, u.spectral_density(wave)), flux_phot_L_nu, rtol=1e-6)
+
+    # PHOTNU <--> FLAM
+    assert_allclose(phot_L_nu.to(
+        L_la, flux_phot_L_nu, u.spectral_density(wave)), flux_L_la, rtol=1e-6)
+    assert_allclose(L_la.to(
+        phot_L_nu, flux_L_la, u.spectral_density(wave)), flux_phot_L_nu, rtol=1e-6)
+
 
 def test_equivalent_units():
-    from .. import imperial
+    from astropy.units import imperial
     with u.add_enabled_units(imperial):
         units = u.g.find_equivalent_units()
         units_set = set(units)
         match = set(
             [u.M_e, u.M_p, u.g, u.kg, u.solMass, u.t, u.u, u.M_earth,
-             u.M_jup, imperial.oz, imperial.lb, imperial.st, imperial.ton])
+             u.M_jup, imperial.oz, imperial.lb, imperial.st, imperial.ton,
+             imperial.slug])
         assert units_set == match
 
     r = repr(units)
@@ -401,10 +480,11 @@ def test_equivalent_units2():
     units = set(u.Hz.find_equivalent_units(u.spectral()))
     match = set(
         [u.AU, u.Angstrom, u.Hz, u.J, u.Ry, u.cm, u.eV, u.erg, u.lyr,
-         u.m, u.micron, u.pc, u.solRad, u.Bq, u.Ci, u.k])
+         u.m, u.micron, u.pc, u.solRad, u.Bq, u.Ci, u.k, u.earthRad,
+         u.jupiterRad])
     assert units == match
 
-    from .. import imperial
+    from astropy.units import imperial
     with u.add_enabled_units(imperial):
         units = set(u.Hz.find_equivalent_units(u.spectral()))
         match = set(
@@ -412,13 +492,14 @@ def test_equivalent_units2():
              imperial.cal, u.cm, u.eV, u.erg, imperial.ft, imperial.fur,
              imperial.inch, imperial.kcal, u.lyr, u.m, imperial.mi,
              imperial.mil, u.micron, u.pc, u.solRad, imperial.yd, u.Bq, u.Ci,
-             imperial.nmi, u.k])
+             imperial.nmi, u.k, u.earthRad, u.jupiterRad])
         assert units == match
 
     units = set(u.Hz.find_equivalent_units(u.spectral()))
     match = set(
         [u.AU, u.Angstrom, u.Hz, u.J, u.Ry, u.cm, u.eV, u.erg, u.lyr,
-         u.m, u.micron, u.pc, u.solRad, u.Bq, u.Ci, u.k])
+         u.m, u.micron, u.pc, u.solRad, u.Bq, u.Ci, u.k, u.earthRad,
+         u.jupiterRad])
     assert units == match
 
 
@@ -442,13 +523,71 @@ def test_irrelevant_equivalency():
 def test_brightness_temperature():
     omega_B = np.pi * (50 * u.arcsec) ** 2
     nu = u.GHz * 5
-    tb = 7.05258885885 * u.K
+    tb = 7.052587837212582 * u.K
     np.testing.assert_almost_equal(
-        tb.value, (1 * u.Jy).to(
-            u.K, equivalencies=u.brightness_temperature(omega_B, nu)).value)
+        tb.value, (1 * u.Jy).to_value(
+            u.K, equivalencies=u.brightness_temperature(nu, beam_area=omega_B)))
     np.testing.assert_almost_equal(
-        1.0, tb.to(
-            u.Jy, equivalencies=u.brightness_temperature(omega_B, nu)).value)
+        1.0, tb.to_value(
+            u.Jy, equivalencies=u.brightness_temperature(nu, beam_area=omega_B)))
+
+
+def test_swapped_args_brightness_temperature():
+    """
+    #5173 changes the order of arguments but accepts the old (deprecated) args
+    """
+    omega_B = np.pi * (50 * u.arcsec) ** 2
+    nu = u.GHz * 5
+    tb = 7.052587837212582 * u.K
+
+    with catch_warnings(AstropyDeprecationWarning) as w:
+        result = (1*u.Jy).to(
+            u.K, equivalencies=u.brightness_temperature(omega_B, nu))
+        roundtrip = result.to(
+            u.Jy, equivalencies=u.brightness_temperature(omega_B, nu))
+        assert len(w) == 2
+    np.testing.assert_almost_equal(tb.value, result.value)
+    np.testing.assert_almost_equal(roundtrip.value, 1)
+
+
+def test_surfacebrightness():
+    sb = 50*u.MJy/u.sr
+    k = sb.to(u.K, u.brightness_temperature(50*u.GHz))
+    np.testing.assert_almost_equal(k.value, 0.650965, 5)
+    assert k.unit.is_equivalent(u.K)
+
+
+def test_beam():
+    # pick a beam area: 2 pi r^2 = area of a Gaussina with sigma=50 arcsec
+    omega_B = 2 * np.pi * (50 * u.arcsec) ** 2
+    new_beam = (5*u.beam).to(u.sr, u.equivalencies.beam_angular_area(omega_B))
+    np.testing.assert_almost_equal(omega_B.to(u.sr).value * 5, new_beam.value)
+    assert new_beam.unit.is_equivalent(u.sr)
+
+    # make sure that it's still consistent with 5 beams
+    nbeams = new_beam.to(u.beam, u.equivalencies.beam_angular_area(omega_B))
+    np.testing.assert_almost_equal(nbeams.value, 5)
+
+    # test inverse beam equivalency
+    # (this is just a sanity check that the equivalency is defined;
+    # it's not for testing numerical consistency)
+    (5/u.beam).to(1/u.sr, u.equivalencies.beam_angular_area(omega_B))
+
+    # test practical case
+    # (this is by far the most important one)
+    flux_density = (5*u.Jy/u.beam).to(u.MJy/u.sr, u.equivalencies.beam_angular_area(omega_B))
+
+    np.testing.assert_almost_equal(flux_density.value, 13.5425483146382)
+
+
+def test_thermodynamic_temperature():
+    nu = 143 * u.GHz
+    tb = 0.0026320501262630277 * u.K
+    eq = u.thermodynamic_temperature(nu, T_cmb=2.7255 * u.K)
+    np.testing.assert_almost_equal(
+        tb.value, (1 * (u.MJy / u.sr)).to_value(u.K, equivalencies=eq))
+    np.testing.assert_almost_equal(
+        1.0, tb.to_value(u.MJy / u.sr, equivalencies=eq))
 
 
 def test_equivalency_context():
@@ -495,6 +634,7 @@ def test_equivalency_context():
         assert l1 > 100. * u.km / u.s
         assert abs((l1 - 500. * u.km / u.s).to(u.angstrom)) < 1. * u.km/u.s
 
+
 def test_equivalency_context_manager():
     base_registry = u.get_current_unit_registry()
 
@@ -530,17 +670,26 @@ def test_equivalency_context_manager():
 
 
 def test_temperature():
-    from ..imperial import deg_F
+    from astropy.units.imperial import deg_F
     t_k = 0 * u.K
-    assert_allclose(t_k.to(u.deg_C, u.temperature()).value, -273.15)
-    assert_allclose(t_k.to(deg_F, u.temperature()).value, -459.67)
+    assert_allclose(t_k.to_value(u.deg_C, u.temperature()), -273.15)
+    assert_allclose(t_k.to_value(deg_F, u.temperature()), -459.67)
 
 
 def test_temperature_energy():
     x = 1000 * u.K
     y = (x * constants.k_B).to(u.keV)
-    assert_allclose(x.to(u.keV, u.temperature_energy()).value, y.value)
-    assert_allclose(y.to(u.K, u.temperature_energy()).value, x.value)
+    assert_allclose(x.to_value(u.keV, u.temperature_energy()), y.value)
+    assert_allclose(y.to_value(u.K, u.temperature_energy()), x.value)
+
+
+def test_molar_mass_amu():
+    x = 1 * (u.g/u.mol)
+    y = 1 * u.u
+    assert_allclose(x.to_value(u.u, u.molar_mass_amu()), y.value)
+    assert_allclose(y.to_value(u.g/u.mol, u.molar_mass_amu()), x.value)
+    with pytest.raises(u.UnitsError):
+        x.to(u.u)
 
 
 def test_compose_equivalencies():
@@ -563,3 +712,81 @@ def test_compose_equivalencies():
             break
     else:
         assert False, "Didn't find speed in compose results"
+
+
+def test_pixel_scale():
+    pix = 75*u.pix
+    asec = 30*u.arcsec
+
+    pixscale = 0.4*u.arcsec/u.pix
+    pixscale2 = 2.5*u.pix/u.arcsec
+
+    assert_quantity_allclose(pix.to(u.arcsec, u.pixel_scale(pixscale)), asec)
+    assert_quantity_allclose(pix.to(u.arcmin, u.pixel_scale(pixscale)), asec)
+
+    assert_quantity_allclose(pix.to(u.arcsec, u.pixel_scale(pixscale2)), asec)
+    assert_quantity_allclose(pix.to(u.arcmin, u.pixel_scale(pixscale2)), asec)
+
+    assert_quantity_allclose(asec.to(u.pix, u.pixel_scale(pixscale)), pix)
+    assert_quantity_allclose(asec.to(u.pix, u.pixel_scale(pixscale2)), pix)
+
+
+def test_plate_scale():
+    mm = 1.5*u.mm
+    asec = 30*u.arcsec
+
+    platescale = 20*u.arcsec/u.mm
+    platescale2 = 0.05*u.mm/u.arcsec
+
+    assert_quantity_allclose(mm.to(u.arcsec, u.plate_scale(platescale)), asec)
+    assert_quantity_allclose(mm.to(u.arcmin, u.plate_scale(platescale)), asec)
+
+    assert_quantity_allclose(mm.to(u.arcsec, u.plate_scale(platescale2)), asec)
+    assert_quantity_allclose(mm.to(u.arcmin, u.plate_scale(platescale2)), asec)
+
+    assert_quantity_allclose(asec.to(u.mm, u.plate_scale(platescale)), mm)
+    assert_quantity_allclose(asec.to(u.mm, u.plate_scale(platescale2)), mm)
+
+
+def test_littleh():
+    H0_70 = 70*u.km/u.s/u.Mpc
+    h70dist = 70 * u.Mpc/u.littleh
+
+    assert_quantity_allclose(h70dist.to(u.Mpc, u.with_H0(H0_70)), 100*u.Mpc)
+
+    # make sure using the default cosmology works
+    cosmodist = cosmology.default_cosmology.get().H0.value * u.Mpc/u.littleh
+    assert_quantity_allclose(cosmodist.to(u.Mpc, u.with_H0()), 100*u.Mpc)
+
+    # Now try a luminosity scaling
+    h1lum = .49 * u.Lsun * u.littleh**-2
+    assert_quantity_allclose(h1lum.to(u.Lsun, u.with_H0(H0_70)), 1*u.Lsun)
+
+    # And the trickiest one: magnitudes.  Using H0=10 here for the round numbers
+    H0_10 = 10*u.km/u.s/u.Mpc
+    # assume the "true" magnitude M = 12.
+    # Then M - 5*log_10(h)  = M + 5 = 17
+    withlittlehmag = 17 * (u.mag - u.MagUnit(u.littleh**2))
+    assert_quantity_allclose(withlittlehmag.to(u.mag, u.with_H0(H0_10)), 12*u.mag)
+
+
+def test_equivelency():
+    ps = u.pixel_scale(10*u.arcsec/u.pix)
+    assert isinstance(ps, Equivalency)
+    assert isinstance(ps.name, list)
+    assert len(ps.name) == 1
+    assert ps.name[0] == "pixel_scale"
+    assert isinstance(ps.kwargs, list)
+    assert len(ps.kwargs) == 1
+    assert ps.kwargs[0] == dict({'pixscale': 10*u.arcsec/u.pix})
+
+
+def test_add_equivelencies():
+    e1 = u.pixel_scale(10*u.arcsec/u.pixel) + u.temperature_energy()
+    assert isinstance(e1, Equivalency)
+    assert e1.name == ["pixel_scale", "temperature_energy"]
+    assert isinstance(e1.kwargs, list)
+    assert e1.kwargs == [dict({'pixscale': 10*u.arcsec/u.pix}), dict()]
+
+    e2 = u.pixel_scale(10*u.arcsec/u.pixel) + [1, 2, 3]
+    assert isinstance(e2, list)

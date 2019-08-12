@@ -1,7 +1,7 @@
 /*============================================================================
 
-  WCSLIB 5.10 - an implementation of the FITS WCS standard.
-  Copyright (C) 1995-2015, Mark Calabretta
+  WCSLIB 6.2 - an implementation of the FITS WCS standard.
+  Copyright (C) 1995-2018, Mark Calabretta
 
   This file is part of WCSLIB.
 
@@ -22,10 +22,10 @@
 
   Author: Mark Calabretta, Australia Telescope National Facility, CSIRO.
   http://www.atnf.csiro.au/people/Mark.Calabretta
-  $Id: spc.h,v 5.10 2015/10/09 08:19:15 mcalabre Exp $
+  $Id: spc.h,v 6.2 2018/10/20 10:03:13 mcalabre Exp $
 *=============================================================================
 *
-* WCSLIB 5.10 - C routines that implement the FITS World Coordinate System
+* WCSLIB 6.2 - C routines that implement the FITS World Coordinate System
 * (WCS) standard.  Refer to the README file provided with WCSLIB for an
 * overview of the library.
 *
@@ -94,24 +94,24 @@
 *     expressed.  Each S-type is encoded as four characters and is
 *     linearly related to one of four basic types as follows:
 *
-*     F: frequency
-*       'FREQ':  frequency
-*       'AFRQ':  angular frequency
-*       'ENER':  photon energy
-*       'WAVN':  wave number
-*       'VRAD':  radio velocity
+*     F (Frequency):
+*       - 'FREQ':  frequency
+*       - 'AFRQ':  angular frequency
+*       - 'ENER':  photon energy
+*       - 'WAVN':  wave number
+*       - 'VRAD':  radio velocity
 *
-*     W: wavelength in vacuo
-*       'WAVE':  wavelength
-*       'VOPT':  optical velocity
-*       'ZOPT':  redshift
+*     W (Wavelength in vacuo):
+*       - 'WAVE':  wavelength
+*       - 'VOPT':  optical velocity
+*       - 'ZOPT':  redshift
 *
-*     A: wavelength in air
-*       'AWAV':  wavelength in air
+*     A (wavelength in Air):
+*       - 'AWAV':  wavelength in air
 *
-*     V: velocity
-*       'VELO':  relativistic velocity
-*       'BETA':  relativistic beta factor
+*     V (Velocity):
+*       - 'VELO':  relativistic velocity
+*       - 'BETA':  relativistic beta factor
 *
 *     The S-type forms the first four characters of the CTYPEia keyvalue,
 *     and CRVALia and CDELTia are expressed as S-type quantities so that
@@ -155,6 +155,11 @@
 * desired S-type is 'ZOPT' (redshift), the P-type is necessarily 'W'
 * (wavelength), and the X-type is 'F' (frequency) by the nature of the
 * instrument.
+*
+* Air-to-vacuum wavelength conversion:
+* ------------------------------------
+* Please refer to the prologue of spx.h for important comments relating to the
+* air-to-vacuum wavelength conversion.
 *
 * Argument checking:
 * ------------------
@@ -647,6 +652,9 @@
 =                         velref = 1
 *
 *                       returns ctype = 'VOPT' with specsys set to 'LSRK'.
+*
+*                       If omitted from the header, the default value of
+*                       VELREF is 0.
 *
 * Returned:
 *   ctype     char[9]   Translated CTYPEia keyvalue, or a copy of ctypeA if no

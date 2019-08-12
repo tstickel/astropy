@@ -1,27 +1,22 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-# TEST_UNICODE_LITERALS
-
 """
 This module contains tests for the name resolve convenience module.
 """
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
 
 import time
+import urllib.request
 
+import pytest
 import numpy as np
 
-from ..name_resolve import (get_icrs_coordinates, NameResolveError,
+from astropy.coordinates.name_resolve import (get_icrs_coordinates, NameResolveError,
                             sesame_database, _parse_response, sesame_url)
-from ..sky_coordinate import SkyCoord
-from ...extern.six.moves import urllib
-from ...tests.helper import remote_data, pytest
-from ... import units as u
+from astropy.coordinates.sky_coordinate import SkyCoord
+from astropy import units as u
 
 _cached_ngc3642 = dict()
-_cached_ngc3642["simbad"] = """# ngc 3642    #Q22523669
+_cached_ngc3642["simbad"] = """# NGC 3642    #Q22523669
 #=S=Simbad (via url):    1
 %@ 503952
 %I.0 NGC 3642
@@ -36,7 +31,7 @@ _cached_ngc3642["simbad"] = """# ngc 3642    #Q22523669
 
 #====Done (2013-Feb-12,16:37:11z)===="""
 
-_cached_ngc3642["vizier"] = """# ngc 3642    #Q22523677
+_cached_ngc3642["vizier"] = """# NGC 3642    #Q22523677
 #=V=VizieR (local):    1
 %J 170.56 +59.08 = 11:22.2     +59:05
 %I.0 {NGC} 3642
@@ -106,7 +101,8 @@ _cached_castor["simbad"] = """# castor    #Q22524495
 
 #====Done (2013-Feb-12,17:00:39z)===="""
 
-@remote_data
+
+@pytest.mark.remote_data
 def test_names():
 
     # First check that sesame is up
@@ -117,28 +113,45 @@ def test_names():
         get_icrs_coordinates("m87h34hhh")
 
     try:
-        icrs = get_icrs_coordinates("ngc 3642")
+        icrs = get_icrs_coordinates("NGC 3642")
     except NameResolveError:
         ra, dec = _parse_response(_cached_ngc3642["all"])
         icrs = SkyCoord(ra=float(ra)*u.degree, dec=float(dec)*u.degree)
 
     icrs_true = SkyCoord(ra="11h 22m 18.014s", dec="59d 04m 27.27s")
-    np.testing.assert_almost_equal(icrs.ra.degree, icrs_true.ra.degree, 3)
-    np.testing.assert_almost_equal(icrs.dec.degree, icrs_true.dec.degree, 3)
+
+    # use precision of only 1 decimal here and below because the result can
+    # change due to Sesame server-side changes.
+    np.testing.assert_almost_equal(icrs.ra.degree, icrs_true.ra.degree, 1)
+    np.testing.assert_almost_equal(icrs.dec.degree, icrs_true.dec.degree, 1)
 
     try:
         icrs = get_icrs_coordinates("castor")
     except NameResolveError:
-        ra,dec = _parse_response(_cached_castor["all"])
+        ra, dec = _parse_response(_cached_castor["all"])
         icrs = SkyCoord(ra=float(ra)*u.degree, dec=float(dec)*u.degree)
 
     icrs_true = SkyCoord(ra="07h 34m 35.87s", dec="+31d 53m 17.8s")
-    np.testing.assert_almost_equal(icrs.ra.degree, icrs_true.ra.degree, 3)
-    np.testing.assert_almost_equal(icrs.dec.degree, icrs_true.dec.degree, 3)
+    np.testing.assert_almost_equal(icrs.ra.degree, icrs_true.ra.degree, 1)
+    np.testing.assert_almost_equal(icrs.dec.degree, icrs_true.dec.degree, 1)
 
 
-@remote_data
-@pytest.mark.parametrize(("name", "db_dict"), [('ngc 3642', _cached_ngc3642),
+def test_names_parse():
+    # a few test cases for parsing embedded coordinates from object name
+    test_names = ['CRTS SSS100805 J194428-420209',
+                  'MASTER OT J061451.7-272535.5',
+                  '2MASS J06495091-0737408',
+                  '1RXS J042555.8-194534',
+                  'SDSS J132411.57+032050.5',
+                  'DENIS-P J203137.5-000511',
+                  '2QZ J142438.9-022739',
+                  'CXOU J141312.3-652013']
+    for name in test_names:
+        sc = get_icrs_coordinates(name, parse=True)
+
+
+@pytest.mark.remote_data
+@pytest.mark.parametrize(("name", "db_dict"), [('NGC 3642', _cached_ngc3642),
                                                ('castor', _cached_castor)])
 def test_database_specify(name, db_dict):
     # First check that at least some sesame mirror is up
@@ -151,10 +164,6 @@ def test_database_specify(name, db_dict):
 
     for db in db_dict.keys():
         with sesame_database.set(db):
-            try:
-                icrs = SkyCoord.from_name(name)
-            except NameResolveError:
-                ra, dec = db_dict[db]
-                icrs = SkyCoord(ra=float(ra)*u.degree, dec=float(dec)*u.degree)
+            icrs = SkyCoord.from_name(name)
 
         time.sleep(1)

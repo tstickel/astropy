@@ -5,148 +5,28 @@ Tests for model evaluation.
 Compare the results of some models with other programs.
 """
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
-import types
-
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
-
+import pytest
 import numpy as np
 
-from numpy.testing import utils
+from numpy.testing import assert_allclose, assert_equal
 
 from .example_models import models_1D, models_2D
-from .. import (fitting, models, LabeledInput, SerialCompositeModel,
-                SummedCompositeModel)
-from ..core import FittableModel
-from ..polynomial import PolynomialBase
-from ...tests.helper import pytest
-
-from ...extern import six
+from astropy.modeling import fitting, models
+from astropy.modeling.models import Gaussian2D
+from astropy.modeling.core import FittableModel
+from astropy.modeling.polynomial import PolynomialBase
+from astropy import units as u
+from astropy.utils import minversion
+from astropy.tests.helper import assert_quantity_allclose
+from astropy.utils import NumpyRNGContext
 
 try:
-    from scipy import optimize  # pylint: disable=W0611
+    import scipy
     HAS_SCIPY = True
 except ImportError:
     HAS_SCIPY = False
 
-
-class TestSerialComposite(object):
-    """
-    Test composite models evaluation in series
-    """
-    def setup_class(self):
-        self.y, self.x = np.mgrid[:5, :5]
-        self.p1 = models.Polynomial1D(3)
-        self.p11 = models.Polynomial1D(3)
-        self.p2 = models.Polynomial2D(3)
-
-    def test_single_array_input(self):
-        model = SerialCompositeModel([self.p1, self.p11])
-        result = model(self.x)
-        xx = self.p11(self.p1(self.x))
-        utils.assert_almost_equal(xx, result)
-
-    def test_labeledinput_1(self):
-        labeled_input = LabeledInput([self.x, self.y], ['x', 'y'])
-        model = SerialCompositeModel([self.p2, self.p1],
-                                     [['x', 'y'], ['z']],
-                                     [['z'], ['z']])
-        result = model(labeled_input)
-        z = self.p2(self.x, self.y)
-        z1 = self.p1(z)
-        utils.assert_almost_equal(z1, result.z)
-
-    def test_labeledinput_2(self):
-        labeled_input = LabeledInput([self.x, self.y], ['x', 'y'])
-        rot = models.Rotation2D(angle=23.4)
-        offx = models.Shift(-2)
-        offy = models.Shift(1.2)
-        model = SerialCompositeModel([rot, offx, offy],
-                                     [['x', 'y'], ['x'], ['y']],
-                                     [['x', 'y'], ['x'], ['y']])
-        result = model(labeled_input)
-        x, y = rot(self.x, self.y)
-        x = offx(x)
-        y = offy(y)
-        utils.assert_almost_equal(x, result.x)
-        utils.assert_almost_equal(y, result.y)
-
-    def test_labeledinput_3(self):
-        labeled_input = LabeledInput([2, 4.5], ['x', 'y'])
-        rot = models.Rotation2D(angle=23.4)
-        offx = models.Shift(-2)
-        offy = models.Shift(1.2)
-        model = SerialCompositeModel([rot, offx, offy],
-                                     [['x', 'y'], ['x'], ['y']],
-                                     [['x', 'y'], ['x'], ['y']])
-        result = model(labeled_input)
-        x, y = rot(2, 4.5)
-        x = offx(x)
-        y = offy(y)
-        utils.assert_almost_equal(x, result.x)
-        utils.assert_almost_equal(y, result.y)
-
-    def test_multiple_input(self):
-        rot = models.Rotation2D(angle=-60)
-        model = SerialCompositeModel([rot, rot])
-        xx, yy = model(self.x, self.y)
-        x1, y1 = model.inverse(xx, yy)
-        utils.assert_almost_equal(x1, self.x)
-        utils.assert_almost_equal(y1, self.y)
-
-
-class TestSummedComposite(object):
-    """Test legacy composite models evaluation."""
-
-    def setup_class(self):
-        self.x = np.linspace(1, 10, 100)
-        self.y = np.linspace(1, 10, 100)
-        self.p1 = models.Polynomial1D(3)
-        self.p11 = models.Polynomial1D(3)
-        self.p2 = models.Polynomial2D(3)
-        self.p1.parameters = [1.4, 2.2, 3.1, 4]
-        self.p2.c0_0 = 100
-
-    def test_single_array_input(self):
-        model = SummedCompositeModel([self.p1, self.p11])
-        result = model(self.x)
-        delta11 = self.p11(self.x)
-        delta1 = self.p1(self.x)
-        xx = delta1 + delta11
-        utils.assert_almost_equal(xx, result)
-
-    def test_labeledinput(self):
-        labeled_input = LabeledInput([self.x, self.y], ['x', 'y'])
-        model = SummedCompositeModel([self.p1, self.p11], inmap=['x'],
-                                     outmap=['x'])
-        result = model(labeled_input)
-        delta11 = self.p11(self.x)
-        delta1 = self.p1(self.x)
-        xx = delta1 + delta11
-        utils.assert_almost_equal(xx, result.x)
-
-    def test_inputs_outputs_mismatch(self):
-        p2 = models.Polynomial2D(1)
-        ch2 = models.Chebyshev2D(1, 1)
-        with pytest.raises(ValueError):
-            SummedCompositeModel([p2, ch2])
-
-
-def test_pickle():
-    p1 = models.Polynomial1D(3)
-    p11 = models.Polynomial1D(4)
-    g1 = models.Gaussian1D(10.3, 5.4, 1.2)
-    serial_composite_model = SerialCompositeModel([p1, g1])
-    parallel_composite_model = SummedCompositeModel([serial_composite_model,
-                                                     p11])
-    s = pickle.dumps(parallel_composite_model)
-    s1 = pickle.loads(s)
-    assert s1(3) == parallel_composite_model(3)
+HAS_SCIPY_14 = HAS_SCIPY and minversion(scipy, "0.14")
 
 
 @pytest.mark.skipif('not HAS_SCIPY')
@@ -167,13 +47,13 @@ def test_custom_model(amplitude=4, frequency=1):
         df = 2 * np.pi * x * amplitude * np.cos(2 * np.pi * frequency * x)
         return np.vstack((da, df))
 
-    SineModel = models.custom_model_1d(sine_model, func_fit_deriv=sine_deriv)
+    SineModel = models.custom_model(sine_model, fit_deriv=sine_deriv)
 
     x = np.linspace(0, 4, 50)
     sin_model = SineModel()
 
-    y = sin_model.evaluate(x, 5., 2.)
-    y_prime = sin_model.fit_deriv(x, 5., 2.)
+    sin_model.evaluate(x, 5., 2.)
+    sin_model.fit_deriv(x, 5., 2.)
 
     np.random.seed(0)
     data = sin_model(x) + np.random.rand(len(x)) - 0.5
@@ -184,7 +64,7 @@ def test_custom_model(amplitude=4, frequency=1):
 
 
 def test_custom_model_init():
-    @models.custom_model_1d
+    @models.custom_model
     def SineModel(x, amplitude=4, frequency=1):
         """Model function"""
 
@@ -196,7 +76,7 @@ def test_custom_model_init():
 
 
 def test_custom_model_defaults():
-    @models.custom_model_1d
+    @models.custom_model
     def SineModel(x, amplitude=4, frequency=1):
         """Model function"""
 
@@ -208,6 +88,19 @@ def test_custom_model_defaults():
 
     assert sin_model.amplitude == 4
     assert sin_model.frequency == 1
+
+
+def test_inconsistent_input_shapes():
+    g = Gaussian2D()
+    x = np.arange(-1., 1, .2)
+    y = x.copy()
+    # check scalar input broadcasting works
+    assert np.abs(g(x,0) - g(x, 0*x)).sum() == 0
+    # but not array broadcasting
+    x.shape = (10, 1)
+    y.shape = (1, 10)
+    with pytest.raises(ValueError):
+        g(x,y)
 
 
 def test_custom_model_bounding_box():
@@ -244,7 +137,7 @@ def test_custom_model_bounding_box():
     assert abs(arr.sum() - sub_arr.sum()) < arr.sum() * 1e-7
 
 
-class Fittable2DModelTester(object):
+class Fittable2DModelTester:
     """
     Test class for all two dimensional parametric models.
 
@@ -282,7 +175,7 @@ class Fittable2DModelTester(object):
         x = test_parameters['x_values']
         y = test_parameters['y_values']
         z = test_parameters['z_values']
-        assert np.all((np.abs(model(x, y) - z) < self.eval_error))
+        assert np.all(np.abs(model(x, y) - z) < self.eval_error)
 
     def test_bounding_box2D(self, model_class, test_parameters):
         """Test bounding box evaluation"""
@@ -356,8 +249,8 @@ class Fittable2DModelTester(object):
                              if not fixed])
         fitted = np.array([param.value for param in params
                            if not param.fixed])
-        utils.assert_allclose(fitted, expected,
-                              atol=self.fit_error)
+        assert_allclose(fitted, expected,
+                        atol=self.fit_error)
 
     @pytest.mark.skipif('not HAS_SCIPY')
     def test_deriv_2D(self, model_class, test_parameters):
@@ -413,12 +306,12 @@ class Fittable2DModelTester(object):
         fitter_no_deriv = fitting.LevMarLSQFitter()
         new_model_no_deriv = fitter_no_deriv(model_no_deriv, xv, yv, data,
                                              estimate_jacobian=True)
-        utils.assert_allclose(new_model_with_deriv.parameters,
-                              new_model_no_deriv.parameters,
-                              rtol=0.1)
+        assert_allclose(new_model_with_deriv.parameters,
+                        new_model_no_deriv.parameters,
+                        rtol=0.1)
 
 
-class Fittable1DModelTester(object):
+class Fittable1DModelTester:
     """
     Test class for all one dimensional parametric models.
 
@@ -456,7 +349,7 @@ class Fittable1DModelTester(object):
         model = create_model(model_class, test_parameters)
         x = test_parameters['x_values']
         y = test_parameters['y_values']
-        utils.assert_allclose(model(x), y, atol=self.eval_error)
+        assert_allclose(model(x), y, atol=self.eval_error)
 
     def test_bounding_box1D(self, model_class, test_parameters):
         """Test bounding box evaluation"""
@@ -481,15 +374,21 @@ class Fittable1DModelTester(object):
         except NotImplementedError:
             pytest.skip("Bounding_box is not defined for model.")
 
-        dx = np.diff(bbox) / 2
-        x1 = np.mgrid[slice(bbox[0], bbox[1] + 1)]
-        x2 = np.mgrid[slice(bbox[0] - dx, bbox[1] + dx + 1)]
+        if isinstance(model, models.Lorentz1D):
+            rtol = 0.01  # 1% agreement is enough due to very extended wings
+            ddx = 0.1  # Finer sampling to "integrate" flux for narrow peak
+        else:
+            rtol = 1e-7
+            ddx = 1
 
+        dx = np.diff(bbox) / 2
+        x1 = np.mgrid[slice(bbox[0], bbox[1] + 1, ddx)]
+        x2 = np.mgrid[slice(bbox[0] - dx, bbox[1] + dx + 1, ddx)]
         arr = model(x2)
         sub_arr = model(x1)
 
         # check for flux agreement
-        assert abs(arr.sum() - sub_arr.sum()) < arr.sum() * 1e-7
+        assert abs(arr.sum() - sub_arr.sum()) < arr.sum() * rtol
 
     @pytest.mark.skipif('not HAS_SCIPY')
     def test_fitter1D(self, model_class, test_parameters):
@@ -524,7 +423,7 @@ class Fittable1DModelTester(object):
                              if not fixed])
         fitted = np.array([param.value for param in params
                            if not param.fixed])
-        utils.assert_allclose(fitted, expected, atol=self.fit_error)
+        assert_allclose(fitted, expected, atol=self.fit_error)
 
     @pytest.mark.skipif('not HAS_SCIPY')
     def test_deriv_1D(self, model_class, test_parameters):
@@ -562,8 +461,8 @@ class Fittable1DModelTester(object):
         fitter_no_deriv = fitting.LevMarLSQFitter()
         new_model_no_deriv = fitter_no_deriv(model_no_deriv, x, data,
                                              estimate_jacobian=True)
-        utils.assert_allclose(new_model_with_deriv.parameters,
-                              new_model_no_deriv.parameters, atol=0.15)
+        assert_allclose(new_model_with_deriv.parameters,
+                        new_model_no_deriv.parameters, atol=0.15)
 
 
 def create_model(model_class, test_parameters, use_constraints=True,
@@ -582,12 +481,14 @@ def create_model(model_class, test_parameters, use_constraints=True,
         return model_class(*test_parameters[parameter_key], **constraints)
 
 
-@pytest.mark.parametrize(('model_class', 'test_parameters'), models_1D.items())
+@pytest.mark.parametrize(('model_class', 'test_parameters'),
+                         sorted(models_1D.items(), key=lambda x: str(x[0])))
 class TestFittable1DModels(Fittable1DModelTester):
     pass
 
 
-@pytest.mark.parametrize(('model_class', 'test_parameters'), models_2D.items())
+@pytest.mark.parametrize(('model_class', 'test_parameters'),
+                         sorted(models_2D.items(), key=lambda x: str(x[0])))
 class TestFittable2DModels(Fittable2DModelTester):
     pass
 
@@ -596,26 +497,26 @@ def test_ShiftModel():
     # Shift by a scalar
     m = models.Shift(42)
     assert m(0) == 42
-    utils.assert_equal(m([1, 2]), [43, 44])
+    assert_equal(m([1, 2]), [43, 44])
 
     # Shift by a list
     m = models.Shift([42, 43], n_models=2)
-    utils.assert_equal(m(0), [42, 43])
-    utils.assert_equal(m([1, 2], model_set_axis=False),
-                       [[ 43,  44], [ 44,  45]])
+    assert_equal(m(0), [42, 43])
+    assert_equal(m([1, 2], model_set_axis=False),
+                 [[43, 44], [44, 45]])
 
 
 def test_ScaleModel():
     # Scale by a scalar
     m = models.Scale(42)
     assert m(0) == 0
-    utils.assert_equal(m([1, 2]), [42, 84])
+    assert_equal(m([1, 2]), [42, 84])
 
     # Scale by a list
     m = models.Scale([42, 43], n_models=2)
-    utils.assert_equal(m(0), [0, 0])
-    utils.assert_equal(m([1, 2], model_set_axis=False),
-                       [[ 42,  84], [ 43,  86]])
+    assert_equal(m(0), [0, 0])
+    assert_equal(m([1, 2], model_set_axis=False),
+                 [[42, 84], [43, 86]])
 
 
 def test_voigt_model():
@@ -631,5 +532,205 @@ def test_voigt_model():
 
 
 def test_model_instance_repr():
-    m = models.Gaussian1D(1, 2, 3)
-    assert repr(m) == '<Gaussian1D(amplitude=1.0, mean=2.0, stddev=3.0)>'
+    m = models.Gaussian1D(1.5, 2.5, 3.5)
+    assert repr(m) == '<Gaussian1D(amplitude=1.5, mean=2.5, stddev=3.5)>'
+
+
+@pytest.mark.skipif("not HAS_SCIPY_14")
+def test_tabular_interp_1d():
+    """
+    Test Tabular1D model.
+    """
+    points = np.arange(0, 5)
+    values = [1., 10, 2, 45, -3]
+    LookupTable = models.tabular_model(1)
+    model = LookupTable(points=points, lookup_table=values)
+    xnew = [0., .7, 1.4, 2.1, 3.9]
+    ans1 = [1., 7.3, 6.8, 6.3, 1.8]
+    assert_allclose(model(xnew), ans1)
+    # Test evaluate without passing `points`.
+    model = LookupTable(lookup_table=values)
+    assert_allclose(model(xnew), ans1)
+    # Test bounds error.
+    xextrap = [0., .7, 1.4, 2.1, 3.9, 4.1]
+    with pytest.raises(ValueError):
+        model(xextrap)
+    # test extrapolation and fill value
+    model = LookupTable(lookup_table=values, bounds_error=False,
+                        fill_value=None)
+    assert_allclose(model(xextrap),
+                    [1., 7.3, 6.8, 6.3, 1.8, -7.8])
+
+    # Test unit support
+    xnew = xnew * u.nm
+    ans1 = ans1 * u.nJy
+    model = LookupTable(points=points*u.nm, lookup_table=values*u.nJy)
+    assert_quantity_allclose(model(xnew), ans1)
+    assert_quantity_allclose(model(xnew.to(u.nm)), ans1)
+    assert model.bounding_box == (0 * u.nm, 4 * u.nm)
+
+    # Test fill value unit conversion and unitless input on table with unit
+    model = LookupTable([1, 2, 3], [10, 20, 30] * u.nJy, bounds_error=False,
+                        fill_value=1e-33*(u.W / (u.m * u.m * u.Hz)))
+    assert_quantity_allclose(model(np.arange(5)),
+                             [100, 10, 20, 30, 100] * u.nJy)
+
+
+@pytest.mark.skipif("not HAS_SCIPY_14")
+def test_tabular_interp_2d():
+    table = np.array([
+       [-0.04614432, -0.02512547, -0.00619557, 0.0144165, 0.0297525],
+       [-0.04510594, -0.03183369, -0.01118008, 0.01201388, 0.02496205],
+       [-0.05464094, -0.02804499, -0.00960086, 0.01134333, 0.02284104],
+       [-0.04879338, -0.02539565, -0.00440462, 0.01795145, 0.02122417],
+       [-0.03637372, -0.01630025, -0.00157902, 0.01649774, 0.01952131]])
+
+    points = np.arange(0, 5)
+    points = (points, points)
+
+    xnew = np.array([0., .7, 1.4, 2.1, 3.9])
+    LookupTable = models.tabular_model(2)
+    model = LookupTable(points, table)
+    znew = model(xnew, xnew)
+    result = np.array(
+        [-0.04614432, -0.03450009, -0.02241028, -0.0069727, 0.01938675])
+    assert_allclose(znew, result, atol=1e-7)
+
+    # test 2D arrays as input
+    a = np.arange(12).reshape((3, 4))
+    y, x = np.mgrid[:3, :4]
+    t = models.Tabular2D(lookup_table=a)
+    r = t(y, x)
+    assert_allclose(a, r)
+
+    with pytest.raises(ValueError):
+        model = LookupTable(points=([1.2, 2.3], [1.2, 6.7], [3, 4]))
+    with pytest.raises(ValueError):
+        model = LookupTable(lookup_table=[1, 2, 3])
+    with pytest.raises(NotImplementedError):
+        model = LookupTable(n_models=2)
+    with pytest.raises(ValueError):
+        model = LookupTable(([1, 2], [3, 4]), [5, 6])
+    with pytest.raises(ValueError):
+        model = LookupTable(([1, 2] * u.m, [3, 4]), [[5, 6], [7, 8]])
+    with pytest.raises(ValueError):
+        model = LookupTable(points, table, bounds_error=False,
+                            fill_value=1*u.Jy)
+
+    # Test unit support
+    points = points[0] * u.nm
+    points = (points, points)
+    xnew = xnew * u.nm
+    model = LookupTable(points, table * u.nJy)
+    result = result * u.nJy
+    assert_quantity_allclose(model(xnew, xnew), result, atol=1e-7*u.nJy)
+    xnew = xnew.to(u.m)
+    assert_quantity_allclose(model(xnew, xnew), result, atol=1e-7*u.nJy)
+    bbox = (0 * u.nm, 4 * u.nm)
+    bbox = (bbox, bbox)
+    assert model.bounding_box == bbox
+
+
+@pytest.mark.skipif("not HAS_SCIPY_14")
+def test_tabular_nd():
+    a = np.arange(24).reshape((2, 3, 4))
+    x, y, z = np.mgrid[:2, :3, :4]
+    tab = models.tabular_model(3)
+    t = tab(lookup_table=a)
+    result = t(x, y, z)
+    assert_allclose(a, result)
+
+    with pytest.raises(ValueError):
+        models.tabular_model(0)
+
+
+def test_with_bounding_box():
+    """
+    Test the option to evaluate a model respecting
+    its bunding_box.
+    """
+    p = models.Polynomial2D(2) & models.Polynomial2D(2)
+    m = models.Mapping((0, 1, 0, 1)) | p
+    with NumpyRNGContext(1234567):
+        m.parameters = np.random.rand(12)
+
+    m.bounding_box = ((3, 9), (1, 8))
+    x, y = np.mgrid[:10, :10]
+    a, b = m(x, y)
+    aw, bw = m(x, y, with_bounding_box=True)
+    ind = (~np.isnan(aw)).nonzero()
+    assert_allclose(a[ind], aw[ind])
+    assert_allclose(b[ind], bw[ind])
+
+    aw, bw = m(x, y, with_bounding_box=True, fill_value=1000)
+    ind = (aw != 1000).nonzero()
+    assert_allclose(a[ind], aw[ind])
+    assert_allclose(b[ind], bw[ind])
+
+    # test the order of bbox is not reversed for 1D models
+    p = models.Polynomial1D(1, c0=12, c1=2.3)
+    p.bounding_box = (0, 5)
+    assert(p(1) == p(1, with_bounding_box=True))
+
+    t3 = models.Shift(10) & models.Scale(2) & models.Shift(-1)
+    t3.bounding_box = ((4.3, 6.9), (6, 15), (-1, 10))
+    assert_allclose(t3([1, 1], [7, 7], [3, 5],with_bounding_box=True),
+                    [[np.nan, 11], [np.nan, 14], [np.nan, 4]])
+
+    trans3 = models.Shift(10) & models.Scale(2) & models.Shift(-1)
+    trans3.bounding_box = ((4.3, 6.9), (6, 15), (-1, 10))
+    assert_allclose(trans3(1, 7, 5, with_bounding_box=True), [11, 14, 4])
+
+
+@pytest.mark.skipif("not HAS_SCIPY_14")
+def test_tabular_with_bounding_box():
+    points = np.arange(5)
+    values = np.array([1.5, 3.4, 6.7, 7, 32])
+    t = models.Tabular1D(points, values)
+    result = t(1, with_bounding_box=True)
+
+    assert result == 3.4
+    assert t.inverse(result, with_bounding_box=True) == 1.
+
+
+@pytest.mark.skipif("not HAS_SCIPY_14")
+def test_tabular_bounding_box_with_units():
+    points = np.arange(5)*u.pix
+    lt = np.arange(5)*u.AA
+    t = models.Tabular1D(points, lt)
+    result = t(1*u.pix, with_bounding_box=True)
+
+    assert result == 1.*u.AA
+    assert t.inverse(result, with_bounding_box=True) == 1*u.pix
+
+
+@pytest.mark.skipif("not HAS_SCIPY_14")
+def test_tabular1d_inverse():
+    """Test that the Tabular1D inverse is defined"""
+    points = np.arange(5)
+    values = np.array([1.5, 3.4, 6.7, 7, 32])
+    t = models.Tabular1D(points, values)
+    result = t.inverse((3.4, 6.7))
+    assert_allclose(result, np.array((1., 2.)))
+
+    # Check that it works for descending values in lookup_table
+    t2 = models.Tabular1D(points, values[::-1])
+    assert_allclose(t2.inverse.points[0], t2.lookup_table[::-1])
+
+    result2 = t2.inverse((7, 6.7))
+    assert_allclose(result2, np.array((1., 2.)))
+
+    # Check that it errors on double-valued lookup_table
+    points = np.arange(5)
+    values = np.array([1.5, 3.4, 3.4, 32, 25])
+    t = models.Tabular1D(points, values)
+    with pytest.raises(NotImplementedError):
+        t.inverse((3.4, 7.))
+
+    # Check that Tabular2D.inverse raises an error
+    table = np.arange(5*5).reshape(5, 5)
+    points = np.arange(0, 5)
+    points = (points, points)
+    t3 = models.Tabular2D(points=points, lookup_table=table)
+    with pytest.raises(NotImplementedError):
+        t3.inverse((3, 3))

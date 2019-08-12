@@ -5,9 +5,8 @@ This package defines the CGS units.  They are also available in the
 top-level `astropy.units` namespace.
 
 """
-from __future__ import absolute_import, division, print_function, unicode_literals
 
-from ..utils.compat.fractions import Fraction
+from fractions import Fraction
 
 from . import si
 from .core import UnitBase, def_unit
@@ -97,7 +96,7 @@ def_unit(['Fr', 'Franklin', 'statcoulomb', 'statC', 'esu'],
 def_unit(['statA', 'statampere'], Fr * s ** -1, namespace=_ns,
          doc='statampere: CGS (ESU) unit of current')
 
-def_unit(['Bi', 'Biot', 'abA', 'abampere', 'emu'],
+def_unit(['Bi', 'Biot', 'abA', 'abampere'],
          g ** Fraction(1, 2) * cm ** Fraction(1, 2) * s ** -1, namespace=_ns,
          doc='Biot: CGS (EMU) unit of current')
 
@@ -114,7 +113,7 @@ def_unit(['G', 'Gauss', 'gauss'], 1e-4 * si.T, namespace=_ns, prefixes=True,
 ###########################################################################
 # BASES
 
-bases = set([cm, g, s, C, rad, cd, K, mol])
+bases = set([cm, g, s, rad, cd, K, mol])
 
 
 ###########################################################################

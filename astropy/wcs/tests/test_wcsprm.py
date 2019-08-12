@@ -1,21 +1,22 @@
 # -*- coding: utf-8 -*-
 
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import gc
 import locale
 import re
 
-from numpy.testing import assert_array_equal, assert_array_almost_equal
+import pytest
 import numpy as np
+from numpy.testing import (assert_array_equal, assert_array_almost_equal,
+                           assert_allclose)
 
-from ...tests.helper import pytest, raises, catch_warnings
-from ...io import fits
-from .. import wcs
-from .. import _wcs
-from ...utils.data import get_pkg_data_contents, get_pkg_data_fileobj, get_pkg_data_filename
-from ... import units as u
+from astropy.tests.helper import raises, catch_warnings
+from astropy.io import fits
+from astropy.wcs import wcs
+from astropy.wcs import _wcs
+from astropy.utils.data import get_pkg_data_contents, get_pkg_data_fileobj, get_pkg_data_filename
+from astropy import units as u
 
 
 ######################################################################
@@ -50,17 +51,17 @@ def test_axis_types():
 def test_cd():
     w = _wcs.Wcsprm()
     w.cd = [[1, 0], [0, 1]]
-    assert w.cd.dtype == np.float
-    assert w.has_cd() == True
+    assert w.cd.dtype == float
+    assert w.has_cd() is True
     assert_array_equal(w.cd, [[1, 0], [0, 1]])
     del w.cd
-    assert w.has_cd() == False
+    assert w.has_cd() is False
 
 
 @raises(AttributeError)
 def test_cd_missing():
     w = _wcs.Wcsprm()
-    assert w.has_cd() == False
+    assert w.has_cd() is False
     w.cd
 
 
@@ -68,9 +69,9 @@ def test_cd_missing():
 def test_cd_missing2():
     w = _wcs.Wcsprm()
     w.cd = [[1, 0], [0, 1]]
-    assert w.has_cd() == True
+    assert w.has_cd() is True
     del w.cd
-    assert w.has_cd() == False
+    assert w.has_cd() is False
     w.cd
 
 
@@ -167,7 +168,7 @@ def test_colnum_invalid():
 
 def test_crder():
     w = _wcs.Wcsprm()
-    assert w.crder.dtype == np.float
+    assert w.crder.dtype == float
     assert np.all(np.isnan(w.crder))
     w.crder[0] = 0
     assert np.isnan(w.crder[1])
@@ -178,17 +179,17 @@ def test_crder():
 def test_crota():
     w = _wcs.Wcsprm()
     w.crota = [1, 0]
-    assert w.crota.dtype == np.float
-    assert w.has_crota() == True
+    assert w.crota.dtype == float
+    assert w.has_crota() is True
     assert_array_equal(w.crota, [1, 0])
     del w.crota
-    assert w.has_crota() == False
+    assert w.has_crota() is False
 
 
 @raises(AttributeError)
 def test_crota_missing():
     w = _wcs.Wcsprm()
-    assert w.has_crota() == False
+    assert w.has_crota() is False
     w.crota
 
 
@@ -196,15 +197,15 @@ def test_crota_missing():
 def test_crota_missing2():
     w = _wcs.Wcsprm()
     w.crota = [1, 0]
-    assert w.has_crota() == True
+    assert w.has_crota() is True
     del w.crota
-    assert w.has_crota() == False
+    assert w.has_crota() is False
     w.crota
 
 
 def test_crpix():
     w = _wcs.Wcsprm()
-    assert w.crpix.dtype == np.float
+    assert w.crpix.dtype == float
     assert_array_equal(w.crpix, [0, 0])
     w.crpix = [42, 54]
     assert_array_equal(w.crpix, [42, 54])
@@ -217,7 +218,7 @@ def test_crpix():
 
 def test_crval():
     w = _wcs.Wcsprm()
-    assert w.crval.dtype == np.float
+    assert w.crval.dtype == float
     assert_array_equal(w.crval, [0, 0])
     w.crval = [42, 54]
     assert_array_equal(w.crval, [42, 54])
@@ -227,7 +228,7 @@ def test_crval():
 
 def test_csyer():
     w = _wcs.Wcsprm()
-    assert w.csyer.dtype == np.float
+    assert w.csyer.dtype == float
     assert np.all(np.isnan(w.csyer))
     w.csyer[0] = 0
     assert np.isnan(w.csyer[1])
@@ -391,25 +392,37 @@ def test_equinox():
 
 def test_fix():
     w = _wcs.Wcsprm()
-    assert w.fix() == {
+    fix_ref = {
         'cdfix': 'No change',
         'cylfix': 'No change',
+        'obsfix': 'No change',
         'datfix': 'No change',
         'spcfix': 'No change',
         'unitfix': 'No change',
-        'celfix': 'No change'}
+        'celfix': 'No change',
+        'obsfix': 'No change',}
+    version = wcs._wcs.__version__
+    if version[0] <= "5":
+        del fix_ref['obsfix']
+    assert w.fix() == fix_ref
 
 
 def test_fix2():
     w = _wcs.Wcsprm()
     w.dateobs = '31/12/99'
-    assert w.fix() == {
+    fix_ref = {
         'cdfix': 'No change',
         'cylfix': 'No change',
-        'datfix': "Changed '31/12/99' to '1999-12-31'",
+        'obsfix': 'No change',
+        'datfix': "Set MJD-OBS to 51543.000000 from DATE-OBS.\nChanged DATE-OBS from '31/12/99' to '1999-12-31'",
         'spcfix': 'No change',
         'unitfix': 'No change',
         'celfix': 'No change'}
+    version = wcs._wcs.__version__
+    if version[0] <= "5":
+        del fix_ref['obsfix']
+        fix_ref['datfix'] = "Changed '31/12/99' to '1999-12-31'"
+    assert w.fix() == fix_ref
     assert w.dateobs == '1999-12-31'
     assert w.mjdobs == 51543.0
 
@@ -417,13 +430,19 @@ def test_fix2():
 def test_fix3():
     w = _wcs.Wcsprm()
     w.dateobs = '31/12/F9'
-    assert w.fix() == {
+    fix_ref = {
         'cdfix': 'No change',
         'cylfix': 'No change',
-        'datfix': "Invalid parameter value: invalid date '31/12/F9'",
+        'obsfix': 'No change',
+        'datfix': "Invalid DATE-OBS format '31/12/F9'",
         'spcfix': 'No change',
         'unitfix': 'No change',
         'celfix': 'No change'}
+    version = wcs._wcs.__version__
+    if version[0] <= "5":
+        del fix_ref['obsfix']
+        fix_ref['datfix'] = "Invalid parameter value: invalid date '31/12/F9'"
+    assert w.fix() == fix_ref
     assert w.dateobs == '31/12/F9'
     assert np.isnan(w.mjdobs)
 
@@ -578,8 +597,8 @@ def test_naxis_set():
 def test_obsgeo():
     w = _wcs.Wcsprm()
     assert np.all(np.isnan(w.obsgeo))
-    w.obsgeo = [1, 2, 3]
-    assert_array_equal(w.obsgeo, [1, 2, 3])
+    w.obsgeo = [1, 2, 3, 4, 5, 6]
+    assert_array_equal(w.obsgeo, [1, 2, 3, 4, 5, 6])
     del w.obsgeo
     assert np.all(np.isnan(w.obsgeo))
 
@@ -683,7 +702,7 @@ def test_spcfix():
     # TODO: We need some data with broken spectral headers here to
     # really test
     header = get_pkg_data_contents(
-        'spectra/orion-velo-1.hdr', encoding='binary')
+        'data/spectra/orion-velo-1.hdr', encoding='binary')
     w = _wcs.Wcsprm(header)
     assert w.spcfix() == -1
 
@@ -707,7 +726,7 @@ def test_specsys():
 
 
 def test_sptr():
-    #TODO: Write me
+    # TODO: Write me
     pass
 
 
@@ -753,6 +772,7 @@ def test_velangl():
     del w.velangl
     assert np.isnan(w.velangl)
 
+
 def test_velosys():
     w = _wcs.Wcsprm()
     assert np.isnan(w.velosys)
@@ -765,7 +785,7 @@ def test_velosys():
 def test_velref():
     w = _wcs.Wcsprm()
     assert w.velref == 0.0
-    w.velref = 42.0
+    w.velref = 42
     assert w.velref == 42.0
     del w.velref
     assert w.velref == 0.0
@@ -808,12 +828,12 @@ def test_detailed_err():
 
 
 def test_header_parse():
-    from ...io import fits
+    from astropy.io import fits
     with get_pkg_data_fileobj(
             'data/header_newlines.fits', encoding='binary') as test_file:
         hdulist = fits.open(test_file)
         w = wcs.WCS(hdulist[0].header)
-    assert w.wcs.ctype[0] == 'RA---TAN'
+    assert w.wcs.ctype[0] == 'RA---TAN-SIP'
 
 
 def test_locale():
@@ -821,7 +841,7 @@ def test_locale():
 
     try:
         locale.setlocale(locale.LC_NUMERIC, 'fr_FR')
-    except:
+    except locale.Error:
         pytest.xfail(
             "Can't set to 'fr_FR' locale, perhaps because it is not installed "
             "on this system")
@@ -830,7 +850,13 @@ def test_locale():
         w = _wcs.Wcsprm(header)
         assert re.search("[0-9]+,[0-9]*", w.to_header()) is None
     finally:
-        locale.setlocale(locale.LC_NUMERIC, orig_locale)
+        if orig_locale is None:
+            # reset to the default setting
+            locale.resetlocale(locale.LC_NUMERIC)
+        else:
+            # restore to whatever the previous value had been set to for
+            # whatever reason
+            locale.setlocale(locale.LC_NUMERIC, orig_locale)
 
 
 @raises(UnicodeEncodeError)
@@ -858,7 +884,7 @@ def test_wcs_sub_error_message():
     w = _wcs.Wcsprm()
     with pytest.raises(TypeError) as e:
         w.sub('latitude')
-    assert str(e).endswith("axes must None, a sequence or an integer")
+    assert e.match("axes must None, a sequence or an integer$")
 
 
 def test_wcs_sub():
@@ -893,14 +919,13 @@ def test_compare():
     assert w.compare(w2, tolerance=1e-6)
 
 
-@pytest.mark.xfail()
 def test_radesys_defaults():
     w = _wcs.Wcsprm()
     w.ctype = ['RA---TAN', 'DEC--TAN']
     w.set()
     assert w.radesys == "ICRS"
 
-@pytest.mark.xfail()
+
 def test_radesys_defaults_full():
 
     # As described in Section 3.1 of the FITS standard "Equatorial and ecliptic
@@ -998,13 +1023,13 @@ def test_iteration():
          [0.00664326, -0.5],
          [-0.58995335, -0.25],
          [0.00664326, -0.25],
-         [-0.58995335,  0.],
-         [0.00664326,  0.],
-         [-0.58995335,  0.25],
-         [0.00664326,  0.25],
-         [-0.58995335,  0.5],
-         [0.00664326,  0.5]],
-        np.float
+         [-0.58995335, 0.],
+         [0.00664326, 0.],
+         [-0.58995335, 0.25],
+         [0.00664326, 0.25],
+         [-0.58995335, 0.5],
+         [0.00664326, 0.5]],
+        float
     )
 
     w = wcs.WCS()
@@ -1024,7 +1049,7 @@ def test_iteration():
          [7.49105110e+01, 1.12348499e+02],
          [1.64400000e+02, 1.49848498e+02],
          [7.49105110e+01, 1.49848498e+02]],
-        np.float)
+        float)
 
     assert_array_almost_equal(x, expected)
 
@@ -1049,7 +1074,7 @@ def test_invalid_args():
         w = _wcs.Wcsprm(naxis=64)
 
     header = get_pkg_data_contents(
-        'spectra/orion-velo-1.hdr', encoding='binary')
+        'data/spectra/orion-velo-1.hdr', encoding='binary')
     with pytest.raises(ValueError):
         w = _wcs.Wcsprm(header, relax='FOO')
 
@@ -1058,3 +1083,72 @@ def test_invalid_args():
 
     with pytest.raises(KeyError):
         w = _wcs.Wcsprm(header, key='A')
+
+
+# Test keywords in the Time standard
+
+
+def test_datebeg():
+    w = _wcs.Wcsprm()
+    assert w.datebeg == ''
+    w.datebeg = '2001-02-11'
+    assert w.datebeg == '2001-02-11'
+    w.datebeg = '31/12/99'
+    fix_ref = {
+        'cdfix': 'No change',
+        'cylfix': 'No change',
+        'obsfix': 'No change',
+        'datfix': "Invalid DATE-BEG format '31/12/99'",
+        'spcfix': 'No change',
+        'unitfix': 'No change',
+        'celfix': 'No change'}
+    assert w.fix() == fix_ref
+
+
+char_keys = ['timesys', 'trefpos', 'trefdir', 'plephem', 'timeunit',
+             'dateref', 'dateavg', 'dateend']
+
+
+@pytest.mark.parametrize('key', char_keys)
+def test_char_keys(key):
+    w = _wcs.Wcsprm()
+    assert getattr(w, key) == ''
+    setattr(w, key, "foo")
+    assert getattr(w, key) == 'foo'
+    with pytest.raises(TypeError):
+        setattr(w, key, 42)
+
+
+num_keys = ['mjdobs', 'mjdbeg', 'mjdend', 'jepoch',
+            'bepoch', 'tstart', 'tstop', 'xposure', 'timsyer',
+            'timrder', 'timedel', 'timepixr', 'timeoffs',
+            'telapse', 'xposure']
+
+
+@pytest.mark.parametrize('key', num_keys)
+def test_num_keys(key):
+    w = _wcs.Wcsprm()
+    assert np.isnan(getattr(w, key))
+    setattr(w, key, 42.0)
+    assert getattr(w, key) == 42.0
+    delattr(w, key)
+    assert np.isnan(getattr(w, key))
+    with pytest.raises(TypeError):
+        setattr(w, key, "foo")
+
+
+array_keys = ['czphs', 'cperi', 'mjdref']
+
+
+@pytest.mark.parametrize('key', array_keys)
+def test_array_keys(key):
+    w = _wcs.Wcsprm()
+    attr = getattr(w, key)
+    assert np.all(np.isnan(attr))
+    assert attr.dtype == float
+    setattr(w, key, [1., 2.])
+    assert_array_equal(getattr(w, key), [1., 2.])
+    with pytest.raises(ValueError):
+        setattr(w, key, ["foo", "bar"])
+    with pytest.raises(ValueError):
+        setattr(w, key, "foo")

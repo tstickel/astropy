@@ -1,13 +1,11 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
 
+import pytest
 import numpy as np
+from numpy.testing import assert_allclose
 
-from ...tests.helper import pytest
-from  numpy.testing import assert_allclose
-from .. import bayesian_blocks, Events, RegularEvents, PointMeasures
+from astropy.stats import bayesian_blocks, RegularEvents
 
 
 def test_single_change_point(rseed=0):
@@ -112,7 +110,7 @@ def test_errors():
 
     # sigma must be broadcastable with x
     with pytest.raises(ValueError):
-        bayesian_blocks(t, fitness='measures',  x=t, sigma=t[:-1])
+        bayesian_blocks(t, fitness='measures', x=t, sigma=t[:-1])
 
 
 def test_fitness_function_results():
@@ -127,7 +125,7 @@ def test_fitness_function_results():
     # Event data with repeats
     t[80:] = t[:20]
     edges = bayesian_blocks(t, fitness='events', p0=0.01)
-    assert_allclose(edges, [-2.6197451, -0.47432431,-0.46202823, 1.85227818])
+    assert_allclose(edges, [-2.6197451, -0.47432431, -0.46202823, 1.85227818])
 
     # Regular event data
     dt = 0.01
@@ -145,4 +143,22 @@ def test_fitness_function_results():
     sigma = 0.1
     x_obs = x + sigma * rng.randn(len(x))
     edges = bayesian_blocks(t, x_obs, sigma, fitness='measures')
-    assert_allclose(edges, [4.360377, 48.456895, 52.597917, 99.455051])
+    expected = [4.360377, 48.456895, 52.597917, 99.455051]
+    assert_allclose(edges, expected)
+
+    # Optional arguments are passed (p0)
+    p0_sel = 0.05
+    edges = bayesian_blocks(t, x_obs, sigma, fitness='measures', p0=p0_sel)
+    assert_allclose(edges, expected)
+
+    # Optional arguments are passed (ncp_prior)
+    ncp_prior_sel = 4 - np.log(73.53 * p0_sel * (len(t) ** -0.478))
+    edges = bayesian_blocks(t, x_obs, sigma, fitness='measures',
+                            ncp_prior=ncp_prior_sel)
+    assert_allclose(edges, expected)
+
+    # Optional arguments are passed (gamma)
+    gamma_sel = np.exp(-ncp_prior_sel)
+    edges = bayesian_blocks(t, x_obs, sigma, fitness='measures',
+                            gamma=gamma_sel)
+    assert_allclose(edges, expected)

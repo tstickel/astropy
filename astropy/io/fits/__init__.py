@@ -12,14 +12,13 @@ standard, see the NASA/Science Office of Standards and Technology
 publication, NOST 100-2.0.
 """
 
-
-from . import py3compat
-
-from ... import config as _config
+from astropy import config as _config
 
 # Set module-global boolean variables
 # TODO: Make it possible to set these variables via environment variables
 # again, once support for that is added to Astropy
+
+
 class Conf(_config.ConfigNamespace):
     """
     Configuration parameters for `astropy.io.fits`.
@@ -46,6 +45,12 @@ class Conf(_config.ConfigNamespace):
         'FITS files. This generally provides better performance, especially '
         'for large files, but may affect performance in I/O-heavy '
         'applications.')
+    lazy_load_hdus = _config.ConfigItem(
+        True,
+        'If True, use lazy loading of HDUs when opening FITS files by '
+        'default; that is fits.open() will only seek for and read HDUs on '
+        'demand rather than reading all HDUs at once.  See the documentation '
+        'for fits.open() for more datails.')
     enable_uint = _config.ConfigItem(
         True,
         'If True, default to recognizing the convention for representing '
@@ -53,18 +58,8 @@ class Conf(_config.ConfigNamespace):
         'and BZERO = 2**BITPIX, represent the data as unsigned integers '
         'per this convention.')
 
+
 conf = Conf()
-
-
-ENABLE_RECORD_VALUED_KEYWORD_CARDS = _config.ConfigAlias(
-    '0.4', 'ENABLE_RECORD_VALUED_KEYWORD_CARDS',
-    'enable_record_valued_keyword_cards')
-EXTENSION_NAME_CASE_SENSITIVE = _config.ConfigAlias(
-    '0.4', 'EXTENSION_NAME_CASE_SENSITIVE', 'extension_name_case_sensitive')
-STRIP_HEADER_WHITESPACE = _config.ConfigAlias(
-    '0.4', 'STRIP_HEADER_WHITESPACE', 'strip_header_whitespace')
-USE_MEMMAP = _config.ConfigAlias(
-    '0.4', 'USE_MEMMAP', 'use_memmap')
 
 
 # Public API compatibility imports
@@ -84,7 +79,6 @@ from .hdu import *
 from .hdu.groups import GroupData
 from .hdu.hdulist import fitsopen as open
 from .hdu.image import Section
-from .hdu.table import new_table
 from .header import Header
 from .verify import VerifyError
 
@@ -92,6 +86,4 @@ from .verify import VerifyError
 __all__ = (['Conf', 'conf'] + card.__all__ + column.__all__ +
            convenience.__all__ + hdu.__all__ +
            ['FITS_record', 'FITS_rec', 'GroupData', 'open', 'Section',
-            'new_table', 'Header', 'VerifyError', 'conf',
-            'EXTENSION_NAME_CASE_SENSITIVE', 'USE_MEMMAP',
-            'ENABLE_RECORD_VALUED_KEYWORD_CARDS'])
+            'Header', 'VerifyError', 'conf'])

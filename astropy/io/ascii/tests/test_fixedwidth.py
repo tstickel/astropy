@@ -1,17 +1,13 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-# TEST_UNICODE_LITERALS
 
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from io import StringIO
+from io import StringIO
 
-from ... import ascii
-from ..core import InconsistentTableError
-from .common import (assert_equal, assert_almost_equal,
-                     setup_function, teardown_function)
-from ....tests.helper import pytest
+import pytest
+
+from astropy.io import ascii
+from astropy.io.ascii.core import InconsistentTableError
+from .common import (assert_equal, assert_almost_equal)
 
 
 def assert_equal_splitlines(arg1, arg2):
@@ -221,8 +217,8 @@ def test_read_detect_col_starts_or_ends():
    Bob   555- 4527  192.168.1.9
    Bill  555-9875  192.255.255.255
 """
-    for kwargs in ({'col_starts': (1,9,19)},
-                   {'col_ends': (8,18,33)}):
+    for kwargs in ({'col_starts': (1, 9, 19)},
+                   {'col_ends': (8, 18, 33)}):
         dat = ascii.read(table,
                          Reader=ascii.FixedWidthNoHeader,
                          names=('Name', 'Phone', 'TCP'),

@@ -3,122 +3,119 @@
 .. include:: workflow/known_projects.inc
 .. _testing-guidelines:
 
-==================
+******************
 Testing Guidelines
-==================
+******************
 
 This section describes the testing framework and format standards for tests in
 Astropy core packages (this also serves as recommendations for affiliated
 packages).
 
 Testing Framework
-=================
+*****************
 
-The testing framework used by Astropy is the `py.test`_ framework.
+The testing framework used by astropy (and packages using the :doc:`Astropy
+package template <astropy-package-template>`) is the `pytest`_ framework,
+accessed through the ``python setup.py test`` command.
 
-.. _py.test: http://pytest.org/latest/
-.. _pytest.main: http://pytest.org/latest/builtin.html#pytest.main
+.. _pytest: https://pytest.org/en/latest/
+
+.. note::
+
+    The ``pytest`` project was formerly called ``py.test``, and you may
+    see the two spellings used interchangeably in the documentation.
+
+.. _testing-dependencies:
+
+Testing Dependencies
+********************
+
+As of Astropy 3.0, the dependencies used by the Astropy test runner are
+provided by a separate package called `pytest-astropy`_. This package provides
+the ``pytest`` dependency itself, in addition to several ``pytest`` plugins
+that are used by Astropy, and will also be of general use to other packages.
+
+Since the testing dependencies are not actually required to install or use
+Astropy, they are not included in ``install_requires`` in ``setup.py``.
+However, for technical reasons it is not currently possible to express these
+dependencies in ``tests_require`` either. Therefore, ``pytest-astropy`` is
+listed as an extra dependency using ``extras_require`` in ``setup.py``.
+Developers who want to run the test suite will need to install the testing
+package using pip::
+
+    > pip install pytest-astropy
+
+A detailed description of the plugins can be found in the :ref:`pytest-plugins`
+section.
+
+.. _pytest-astropy: https://github.com/astropy/pytest-astropy
 
 .. _running-tests:
 
 Running Tests
-=============
+*************
 
 There are currently three different ways to invoke Astropy tests. Each
-method invokes `py.test`_ to run the tests but offers different options when
-calling.
+method invokes `pytest`_ to run the tests but offers different options when
+calling. To run the tests, you will need to make sure you have the `pytest`_
+package (version 3.1 or later) installed.
 
 In addition to running the Astropy tests, these methods can also be called
 so that they check Python source code for `PEP8 compliance
-<http://www.python.org/dev/peps/pep-0008/>`_. All of the PEP8 testing
+<https://www.python.org/dev/peps/pep-0008/>`_. All of the PEP8 testing
 options require the `pytest-pep8 plugin
-<http://pypi.python.org/pypi/pytest-pep8>`_, which must be installed
+<https://pypi.python.org/pypi/pytest-pep8>`_, which must be installed
 separately.
 
 setup.py test
--------------
+=============
 
-The safest way to run the astropy test suite is via the setup command ``test``.
-This is invoked by running ``python setup.py test`` while in the astropy source
-code directory. Run ``python setup.py test --help`` to see the options to the
-test command.
+The astropy core package and the Astropy package template provide a ``test``
+setup command, invoked by running ``python setup.py test`` while in the
+package root directory. Run ``python setup.py test --help`` to see the
+options to the test command.
+
+Since ``python setup.py test`` wraps the widely-used pytest framework, you may
+from time to time want to pass options to the ``pytest`` command itself. For
+example, the ``-x`` option to stop after the first failure can be passed
+through with the ``--args`` argument::
+
+    > python setup.py test --args "-x"
+
+`pytest`_ will look for files that 
+:ref:`look like tests <pytest:python test discovery>`, per default
+in the current directory and all recursive directories, then run all
+the code that looks like tests (essentially all functions or methods
+with ``test_`` prefixes or inside ``Test`` prefixed classes) within
+those files.
 
 Turn on PEP8 checking by passing ``--pep8`` to the ``test`` command. This will
 turn off regular testing and enable PEP8 testing.
 
-.. note::
-
-    This method of running the tests defaults to the version of `py.test`_
-    that is bundled with Astropy. To use the locally-installed version, you
-    can set the ``ASTROPY_USE_SYSTEM_PYTEST`` environment variable, eg.::
-
-        > ASTROPY_USE_SYSTEM_PYTEST=1 python setup.py test
-
-py.test
--------
-
-An alternative way to run tests from the command line is to switch to the source
-code directory of astropy and simply type::
-
-    py.test
-
-`py.test`_ will look for files that `look like tests
-<http://pytest.org/latest/goodpractises.html#conventions-for-python-test-discovery>`_
-in the current directory and all recursive directories then run all the code that
-`looks like tests
-<http://pytest.org/latest/goodpractises.html#conventions-for-python-test-discovery>`_
-within those files.
-
-.. note::
-    To test any compiled C/Cython extensions, you must run ``python setup.py
-    develop`` prior to running the py.test command-line script.  Otherwise,
-    any tests that make use of these extensions will not succeed.
-
-You may specify a specific test file or directory at the command line::
-
-    py.test test_file.py
-
-To run a specific test within a file use the ``-k`` option::
-
-    py.test test_file.py -k "test_function"
-
-You may also use the ``-k`` option to not run tests py putting a ``-`` in front
-of the matching string::
-
-    py.test test_file.py -k "-test_function"
-
-py.test has a number of `command line usage options.
-<http://pytest.org/latest/usage.html>`_
-
-Turn on PEP8 testing by adding the ``--pep8`` flag to the `py.test`_ call. By
-default regular tests will also be run but these can be turned off by adding
-``-k pep8``::
-
-  py.test some_dir --pep8 -k pep8
-
-.. note::
-    This method of running the tests uses the locally-installed version of
-    `py.test`_ rather than the bundled one, and hence will fail if the local
-    version it is not up-to-date enough (`py.test`_ 2.2 as of this writing).
+Note also that this test runner actually installs astropy into a temporary
+directory and uses that for running the tests.  This means that tests of things
+like entry points or data file paths should act just like they would once
+astropy is installed.  The other two approaches described below do *not* do
+this, and hence may give different results when run from the astropy source
+code. Hence if you're running the tests because you've modified code that might
+be impacted by this, the ``setup.py test`` approach is the recommended method.
 
 .. _astropy.test():
 
 astropy.test()
---------------
+==============
 
-AstroPy includes a standalone version of py.test that allows to tests
-to be run even if py.test is not installed. Tests can be run from within
-AstroPy with::
+Tests can be run from within Astropy with::
 
     import astropy
     astropy.test()
 
-This will run all the default tests for AstroPy.
+This will run all the default tests for Astropy.
 
 Tests for a specific package can be run by specifying the package in the call
 to the ``test()`` function::
 
-    astropy.test('io.fits')
+    astropy.test(package='io.fits')
 
 This method works only with package names that can be mapped to Astropy
 directories. As an alternative you can test a specific directory or file
@@ -132,75 +129,52 @@ or absolutely.
 By default `astropy.test()`_ will skip tests which retrieve data from the
 internet. To turn these tests on use the ``remote_data`` flag::
 
-    astropy.test('io.fits', remote_data=True)
+    astropy.test(package='io.fits', remote_data=True)
 
 In addition, the ``test`` function supports any of the options that can be
-passed to `pytest.main() <http://pytest.org/latest/builtin.html#pytest.main>`_,
+passed to :ref:`pytest.main() <pytest:pytest.main-usage>`
 and convenience options ``verbose=`` and ``pastebin=``.
 
 Enable PEP8 compliance testing with ``pep8=True`` in the call to
 ``astropy.test``. This will enable PEP8 checking and disable regular tests.
 
-.. note::
-    This method of running the tests defaults to the version of
-    `py.test`_ that is bundled with Astropy. To use the locally-installed
-    version, you should set the ``ASTROPY_USE_SYSTEM_PYTEST`` environment
-    variable (see :doc:`/config/index`) or the `py.test`_ method described
-    above.
+Astropy Test Function
+---------------------
 
-Tox
----
+.. autofunction:: astropy.test
 
-`Tox <http://tox.readthedocs.org>`_ is a sort of meta-test runner for Python.
-It installs a project into one or more virtualenvs (usually one for each Python
-version supported), build and installs the project into each virtualenv, and
-runs the projects tests (or any other build processes one might want to test).
-This is a good way to run the tests against multiple installed Python versions
-locally without pushing to a continuous integration system.
+pytest
+======
 
-Tox works by detecting the presence of a file called ``tox.ini`` in the root of
-a Python project and using that to configure the desired virtualenvs and start
-the tests.  So to run the Astropy tests on multiple Python versions using tox,
-simply install Tox::
+The test suite can be run directly from the native ``pytest`` command. In this
+case, it is important for developers to be aware that they must manually
+rebuild any extensions by running ``setup.py build_ext`` before testing.
 
-    $ pip install tox
-
-and then from the root of an Astropy repository clone run::
-
-    $ tox
-
-The Astropy tox configuration currently tests against Python versions 2.6, 2.7,
-3.2, and 3.3.  Tox will automatically skip any Python versions you do not have
-installed, but best results are achieved if you first install all supported
-Python versions and make sure they are on your ``$PATH``.
-
-.. note::
-
-    Tox creates its virtualenvs in the root of your project under a ``.tox``
-    directory (which is automatically ignored by ``.gitignore``).  It's worth
-    making note of this, however, as it is common practice to sometimes clean
-    up a git repository and delete any untracked files by running the ``git
-    clean -dfx`` command.  As it can take a long time to rebuild the tox
-    virtualenvs you may want to exclude the ``.tox`` directory from any
-    cleanup.  This can be achieved by running ``git clean -dfx -e .tox``,
-    though it is probably worth defining a `git alias
-    <https://git.wiki.kernel.org/index.php/Aliases>`_ to do this.
+In contrast to the case of running from ``setup.py``, the ``--doctest-plus``
+and ``--doctest-rst`` options are not enabled by default when running the
+``pytest`` command directly. This flags should be explicitly given if they are
+needed.
 
 Test-running options
---------------------
+====================
 
 Running parts of the test suite
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------------
 
-It is possible to run only the tests for a particular subpackage.  For
-example, to run only the ``wcs`` tests from the commandline::
+It is possible to run only the tests for a particular subpackage or set of
+subpackages.  For example, to run only the ``wcs`` tests from the
+commandline::
 
     python setup.py test -P wcs
+
+Or, to run only the ``wcs`` and ``utils`` tests::
+
+    python setup.py test -P wcs,utils
 
 Or from Python::
 
     >>> import astropy
-    >>> astropy.test(package="wcs")
+    >>> astropy.test(package="wcs,utils")
 
 You can also specify a single file to test from the commandline::
 
@@ -214,8 +188,10 @@ example::
 
     python setup.py test -t units/index.rst
 
+.. _open-files:
+
 Testing for open files
-^^^^^^^^^^^^^^^^^^^^^^
+----------------------
 
 Astropy can test whether any of the unit tests inadvertently leave any
 files open.  Since this greatly slows down the time it takes to run
@@ -230,22 +206,25 @@ To use it from Python, do::
     >>> import astropy
     >>> astropy.test(open_files=True)
 
-Test coverage reports
-^^^^^^^^^^^^^^^^^^^^^
+For more information on the ``pytest-openfiles`` plugin see
+:ref:`openfiles-plugin`
 
-Astropy can use `coverage.py <http://nedbatchelder.com/code/coverage/>`_ to
+Test coverage reports
+---------------------
+
+Astropy can use `coverage.py <http://coverage.readthedocs.io/en/latest/>`_ to
 generate test coverage reports.  To generate a test coverage report, use::
 
     python setup.py test --coverage
 
 There is a `coveragerc
-<http://nedbatchelder.com/code/coverage/config.html>`_ file that
+<http://coverage.readthedocs.io/en/latest/config.html>`_ file that
 defines files to omit as well as lines to exclude.  It is installed
 along with astropy so that the ``astropy`` testing framework can use
 it.  In the source tree, it is at ``astropy/tests/coveragerc``.
 
 Running tests in parallel
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 It is possible to speed up astropy's tests using the `pytest-xdist
 <https://pypi.python.org/pypi/pytest-xdist>`_ plugin.  This plugin can be
@@ -258,30 +237,45 @@ commandline option.  For example, to use 4 processes::
 
     python setup.py test --parallel=4
 
-Pass a negative number to ``'--parallel'`` to create the same number of
-processes as cores on your machine.
+Pass ``--parallel=auto`` to create the same number of processes as cores
+on your machine.
 
 Similarly, this feature can be invoked from Python::
 
     >>> import astropy
     >>> astropy.test(parallel=4)
 
-Writing tests
-=============
+Running tests to catch permissions errors
+-----------------------------------------
 
-``py.test`` has the following test discovery rules:
+It is possible to write code or tests that write into the source directory. This
+is not desirable because Python packages can be (and frequently are) installed
+in locations where the user may not have write permissions.  To check for these
+cases, the test runner has an option to have the test-runner
+directory be set as read-only to ensure the tests are not writing to that
+location.  This mode can be triggered by running the tests like so::
+
+    python setup.py test --readonly
+
+
+
+.. _writing-tests:
+
+Writing tests
+*************
+
+``pytest`` has the following test discovery rules:
 
  * ``test_*.py`` or ``*_test.py`` files
  * ``Test`` prefixed classes (without an ``__init__`` method)
  * ``test_`` prefixed functions and methods
 
-Consult the `test discovery rules
-<http://pytest.org/latest/goodpractises.html#conventions-for-python-test-discovery>`_
+Consult the :ref:`test discovery rules <pytest:python test discovery>`
 for detailed information on how to name files and tests so that they are
-automatically discovered by `py.test`_.
+automatically discovered by `pytest`_.
 
 Simple example
---------------
+==============
 
 The following example shows a simple function and a test to test this
 function::
@@ -296,13 +290,13 @@ function::
 
 If we place this in a ``test.py`` file and then run::
 
-    py.test test.py
+    pytest test.py
 
 The result is::
 
     ============================= test session starts ==============================
-    python: platform darwin -- Python 2.7.2 -- pytest-1.1.1
-    test object 1: /Users/tom/tmp/test.py
+    python: platform darwin -- Python 3.6.0 -- pytest-3.2.0
+    test object 1: /Users/username/tmp/test.py
 
     test.py F
 
@@ -318,10 +312,10 @@ The result is::
     =========================== 1 failed in 0.07 seconds ===========================
 
 Where to put tests
-------------------
+==================
 
 Package-specific tests
-^^^^^^^^^^^^^^^^^^^^^^
+----------------------
 
 Each package should include a suite of unit tests, covering as many of
 the public methods/functions as possible. These tests should be
@@ -333,21 +327,23 @@ included inside each sub-package, e.g::
 the tests can be imported and so that they can use relative imports.
 
 Interoperability tests
-^^^^^^^^^^^^^^^^^^^^^^
+----------------------
 
 Tests involving two or more sub-packages should be included in::
 
     astropy/tests/
 
 Regression tests
-----------------
+================
 
 Any time a bug is fixed, and wherever possible, one or more regression tests
 should be added to ensure that the bug is not introduced in future. Regression
 tests should include the ticket URL where the bug was reported.
 
+.. _data-files:
+
 Working with data files
------------------------
+=======================
 
 Tests that need to make use of a data file should use the
 `~astropy.utils.data.get_pkg_data_fileobj` or
@@ -364,19 +360,27 @@ data server by using the `~astropy.utils.data.compute_hash` function on a
 local copy of the file.
 
 Tests that may retrieve remote data should be marked with the
-``@remote_data`` decorator, or, if a doctest, flagged with the
-``REMOTE_DATA`` flag.  Tests marked in this way will be skipped by default
-by ``astropy.test()`` to prevent test runs from taking too long. These
-tests can be run by ``astropy.test()`` by adding the
-``remote_data=True`` flag.  Turn on the remote data tests at the
-command line with ``py.test --remote-data``.
+``@pytest.mark.remote_data`` decorator, or, if a doctest, flagged with the
+``REMOTE_DATA`` flag.  Tests marked in this way will be skipped by default by
+``astropy.test()`` to prevent test runs from taking too long. These tests can
+be run by ``astropy.test()`` by adding the ``remote_data='any'`` flag.  Turn on
+the remote data tests at the command line with ``python setup.py test
+--remote-data=any``.
+
+It is possible to mark tests using
+``@pytest.mark.remote_data(source='astropy')``, which can be used to indicate
+that the only required data is from the http://data.astropy.org server. To
+enable just these tests, you can run the
+tests with ``python setup.py test --remote-data=astropy``.
+
+For more information on the ``pytest-remotedata`` plugin, see
+:ref:`remotedata-plugin`.
 
 Examples
-^^^^^^^^
-.. code-block:: none
+--------
+.. code-block:: python
 
     from ...config import get_data_filename
-    from ...tests.helper import remote_data
 
     def test_1():
         """Test version using a local file."""
@@ -384,7 +388,7 @@ Examples
         datafile = get_data_filename('filename.fits')
         # do the test
 
-    @remote_data
+    @pytest.mark.remote_data
     def test_2():
         """Test version using a remote file."""
         #this is the hash for a particular version of a file stored on the
@@ -404,7 +408,7 @@ get removed by the system. In the long term, once test data files become too
 large, we will need to design a mechanism for removing test data immediately.
 
 Tests that use the file cache
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-----------------------------
 
 By default, the Astropy test runner sets up a clean file cache in a temporary
 directory that is used only for that test run and then destroyed.  This is to
@@ -420,34 +424,34 @@ a context manager within a test to temporarily set the cache to a custom
 location, or as a *decorator* that takes effect for an entire test function
 (not including setup or teardown, which would have to be decorated separately).
 
-Furthermore, it is possible to set an option ``cache_dir`` in the py.test
-config file which sets the cache location for the entire test run.  A
-``--cache-dir`` command-line option is also supported (which overrides all
-other settings).  Currently it is not directly supported by the
+Furthermore, it is possible to set an option ``astropy_cache_dir`` in the
+pytest config file which sets the cache location for the entire test run.  A
+``--astropy-cache-dir`` command-line option is also supported (which overrides
+all other settings).  Currently it is not directly supported by the
 ``./setup.py test`` command, so it is necessary to use it with the ``-a``
 argument like::
 
-    $ ./setup.py test -a "--cache-dir=/path/to/custom/cache/dir"
+    $ ./setup.py test -a "--astropy-cache-dir=/path/to/custom/cache/dir"
 
 
 Tests that create files
------------------------
+=======================
 
 Tests may often be run from directories where users do not have write
 permissions so tests which create files should always do so in
-temporary directories. This can be done with the `py.test tmpdir
-function argument <http://pytest.org/latest/tmpdir.html>`_ or with
-Python's built-in `tempfile module
-<http://docs.python.org/library/tempfile.html#module-tempfile>`_.
+temporary directories. This can be done with the
+:ref:`pytest 'tmpdir' fixture <pytest:tmpdir handling>` or with
+Python's built-in :ref:`tempfile module <python:tempfile-examples>`.
+
 
 Setting up/Tearing down tests
------------------------------
+=============================
 
 In some cases, it can be useful to run a series of tests requiring something
 to be set up first. There are four ways to do this:
 
 Module-level setup/teardown
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+---------------------------
 
 If the ``setup_module`` and ``teardown_module`` functions are specified in a
 file, they are called before and after all the tests in the file respectively.
@@ -486,7 +490,7 @@ the functions in the file access it::
         os.remove(DATAFILE)
 
 Class-level setup/teardown
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+--------------------------
 
 Tests can be organized into classes that have their own setup/teardown
 functions. In the following ::
@@ -502,12 +506,12 @@ functions. In the following ::
             self.NUM = 42
 
         def test_1(self):
-            """Test behaviour for a specific input value."""
+            """Test behavior for a specific input value."""
             added = add_nums(11, self.NUM)
             assert added == 53
 
         def test_2(self):
-            """Test behaviour for another input value."""
+            """Test behavior for another input value."""
             added = add_nums(13, self.NUM)
             assert added == 55
 
@@ -518,7 +522,7 @@ In the above example, the ``setup_class`` method is called first, then all the
 tests in the class, and finally the ``teardown_class`` is called.
 
 Method-level setup/teardown
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+---------------------------
 
 There are cases where one might want setup and teardown methods to be run
 before and after *each* test. For this, use the ``setup_method`` and
@@ -535,12 +539,12 @@ before and after *each* test. For this, use the ``setup_method`` and
             self.NUM = 42
 
         def test_1(self):
-        """Test behaviour for a specific input value."""
+        """Test behavior for a specific input value."""
             added = add_nums(11, self.NUM)
             assert added == 53
 
         def test_2(self):
-        """Test behaviour for another input value."""
+        """Test behavior for another input value."""
             added = add_nums(13, self.NUM)
             assert added == 55
 
@@ -548,7 +552,7 @@ before and after *each* test. For this, use the ``setup_method`` and
             pass
 
 Function-level setup/teardown
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-----------------------------
 
 Finally, one can use ``setup_function`` and ``teardown_function`` to define a
 setup/teardown mechanism to be run before and after each function in a module.
@@ -565,14 +569,14 @@ These take one argument, which is the function being tested::
         """Second test."""
         # do test
 
-    def teardown_method(function):
+    def teardown_function(function):
         pass
 
 Parametrizing tests
--------------------
+===================
 
 If you want to run a test several times for slightly different values, then
-it can be advantageous to use the ``py.test`` option to parametrize tests.
+it can be advantageous to use the ``pytest`` option to parametrize tests.
 For example, instead of writing::
 
     def test1():
@@ -593,7 +597,7 @@ inputs::
         assert type(letter) == str
 
 Tests requiring optional dependencies
--------------------------------------
+=====================================
 
 For tests that test functions or methods that require optional
 dependencies (e.g. Scipy), pytest should be instructed to skip the
@@ -616,32 +620,32 @@ In this way, the test is run if Scipy is present, and skipped if
 not. No tests should fail simply because an optional dependency is not
 present.
 
-Using py.test helper functions
-------------------------------
+Using pytest helper functions
+=============================
 
-If your tests need to use `py.test helper functions
-<http://pytest.org/latest/builtin.html#pytest-helpers>`_, such as
+If your tests need to use `pytest helper functions
+<https://docs.pytest.org/en/latest/reference.html#functions>`_, such as
 ``pytest.raises``, import ``pytest`` into your test module like so::
+
+    import pytest
+
+Prior to Astropy 2.0, it was possible to import pytest from a
+bundled version using e.g.::
 
     from ...tests.helper import pytest
 
-You may need to adjust the relative import to work for the depth of
-your module.  ``tests.helper`` imports ``pytest`` either from the
-user's system or ``extern.pytest`` if the user does not have py.test
-installed. This is so that users need not install py.test to run
-AstroPy's tests.
-
+but this is no longer the recommended method.
 
 Testing warnings
-----------------
+================
 
 In order to test that warnings are triggered as expected in certain
 situations, you can use the `astropy.tests.helper.catch_warnings`
 context manager.  Unlike the `warnings.catch_warnings` context manager
 in the standard library, this one will reset all warning state before
 hand so one is assured to get the warnings reported, regardless of
-what errors may have been emitted by other tests previously.  Here is
-a real-world example::
+what errors or warnings may have been emitted by other tests previously.
+Here is a real-world example::
 
   from astropy.tests.helper import catch_warnings
 
@@ -653,17 +657,56 @@ a real-world example::
       assert ("In merged column 'a' the 'units' attribute does not match (cm != m)"
               in str(warning_lines[0].message))
 
+`pytest`_ provides its own context manager
+:ref:`pytest.warns <pytest:warns>` that, completely
+analogously to ``pytest.raises`` (see below) allows to probe explicitly
+for specific warning classes and, through the optional ``match`` argument,
+messages. Note that when no warning of the specified type is
+triggered, this will make the test fail. When checking for optional,
+but not mandatory warnings, Astropy's ``catch_warnings`` is therefore the
+better option, as it will collect any number of warning lines (including
+zero). 
+
 .. note::
 
-   Within `py.test`_ there is also the option of using the ``recwarn``
-   function argument to test that warnings are triggered.  This method has
-   been found to be problematic in at least one case (`pull request 1174
-   <https://github.com/astropy/astropy/pull/1174#issuecomment-20249309>`_)
-   so the `astropy.tests.helper.catch_warnings` context manager is
-   preferred.
+   With `pytest`_ there is also the option of using the
+   :ref:`recwarn <pytest:recwarn>` function argument to test that
+   warnings are triggered within the entire embedding function.
+   This method has been found to be problematic in at least one case
+   (`pull request 1174 <https://github.com/astropy/astropy/pull/1174#issuecomment-20249309>`_)
+   and the alternative of calling ``pytest.warns`` with a warning type
+   argument of ``None`` requires further processing of the recorded
+   warning(s), so the `astropy.tests.helper.catch_warnings` context
+   manager is preferred in such cases.
+
+Testing exceptions
+==================
+
+Just like the handling of warnings described above, tests that are
+designed to trigger certain errors should verify that an exception of
+the expected type is raised in the expected place.  This is efficiently
+done by running the tested code inside the
+:ref:`pytest.raises <pytest:assertraises>`
+context manager.  Its optional ``match`` argument allows to check the
+error message for any patterns using ``regex`` syntax.  For example the
+matches ``pytest.raises(OSError, match=r'^No such file')`` and
+``pytest.raises(OSError, match=r'or directory$')`` would be equivalent
+to ``assert str(err).startswith(No such file)`` and ``assert
+str(err).endswith(or directory)``, respectively, on the raised error
+message ``err``.
+For matching multi-line messages you need to pass the ``(?s)``
+:ref:`flag <python:re-syntax>`
+to the underlying ``re.search``, as in the example below::
+
+  with pytest.raises(fits.VerifyError, match=r'(?s)not upper.+ Illegal key') as excinfo:
+      hdu.verify('fix+exception')
+  assert str(excinfo.value).count('Card') == 2
+
+This invocation also illustrates how to get an ``ExceptionInfo`` object
+returned to perform additional diagnostics on the info.
 
 Testing configuration parameters
---------------------------------
+================================
 
 In order to ensure reproducibility of tests, all configuration items
 are reset to their default values when the test runner starts up.
@@ -681,24 +724,8 @@ For example::
         with conf.set_temp('max_lines', 6):
             # ...
 
-Testing with Unicode literals
------------------------------
-
-Python 2 can run code in two modes: by default, string literals are
-8-bit `bytes` objects.  However, when ``from __future__ import
-unicode_literals`` is used, string literals are `unicode` objects.  In
-order to ensure that astropy supports user code written in both
-styles, the testing framework has a special feature to run a module
-containing tests in both modes.  Simply add the comment::
-
-    # TEST_UNICODE_LITERALS
-
-anywhere in the file, and all tests in that file will be tested twice:
-once in the default mode where string literals are `bytes`, and again
-where string literals are `unicode`.
-
 Marking blocks of code to exclude from coverage
------------------------------------------------
+===============================================
 
 Blocks of code may be ignored by the coverage testing by adding a
 comment containing the phrase ``pragma: no cover`` to the start of the
@@ -707,27 +734,119 @@ block::
     if this_rarely_happens:  # pragma: no cover
         this_call_is_ignored()
 
-Blocks of code that are intended to run only in Python 2.x or 3.x may
-also be marked so that they will be ignored when appropriate by
-``coverage.py``::
+.. _image-tests:
 
-    if sys.version_info[0] >= 3:  # pragma: py3
-        do_it_the_python3_way()
-    else:  # pragma: py2
-        do_it_the_python2_way()
+Image tests with pytest-mpl
+===========================
 
-Using ``six.PY3`` and ``six.PY2`` will also automatically exclude
-blocks from coverage, without requiring the pragma comment::
+Running image tests
+-------------------
 
-    if six.PY3:
-        do_it_the_python3_way()
-    elif six.PY2:
-        do_it_the_python2_way()
+We make use of the `pytest-mpl <https://pypi.python.org/pypi/pytest-mpl>`_
+plugin to write tests where we can compare the output of plotting commands
+with reference files on a pixel-by-pixel basis (this is used for instance in
+:ref:`astropy.visualization.wcsaxes <wcsaxes>`).
+
+To run the Astropy tests with the image comparison, use::
+
+    python setup.py test -a "--mpl" --remote-data
+
+However, note that the output can be very sensitive to the version of Matplotlib
+as well as all its dependencies (e.g. freetype), so we recommend running the
+image tests inside a `Docker <https://www.docker.com/>`__ container which has a
+frozen set of package versions (Docker containers can be thought of as mini
+virtual machines). We have made a `set of Docker container images
+<https://hub.docker.com/u/astropy/>`__ that can be used for this. Once you have
+installed Docker, to run the Astropy tests with the image comparison inside a
+Docker container, make sure you are inside the Astropy repository (or the
+repository of the package you are testing) then do::
+
+    docker run -it -v ${PWD}:/repo astropy/image-tests-py35-mpl300:1.3 /bin/bash
+
+This will start up a bash prompt in the Docker container, and you should see
+something like::
+
+    root@8173d2494b0b:/#
+
+You can now go to the ``/repo`` directory, which is the same folder as
+your local version of the repository you are testing::
+
+    cd /repo
+
+You can then run the tests as above::
+
+    python3 setup.py test -a "--mpl" --remote-data
+
+Type ``exit`` to exit the container.
+
+You can find the names of the available Docker images on the `Docker Hub
+<https://hub.docker.com/r/astropy/>`_.
+
+Writing image tests
+-------------------
+
+The `README.rst <https://github.com/matplotlib/pytest-mpl/blob/master/README.rst>`__
+for the plugin contains information on writing tests with this plugin. The only
+key addition compared to those instructions is that you should set
+``baseline_dir``::
+
+    from astropy.tests.image_tests import IMAGE_REFERENCE_DIR
+
+    @pytest.mark.mpl_image_compare(baseline_dir=IMAGE_REFERENCE_DIR)
+
+This is because since the reference image files would contribute significantly
+to the repository size, we instead store them on the http://data.astropy.org
+site. The downside is that it is a little more complicated to create or
+re-generate reference files, but we describe the process here.
+
+Generating reference images
+---------------------------
+
+Once you have a test for which you want to (re-)generate reference images,
+start up one of the Docker containers using e.g.::
+
+  docker run -it -v ${PWD}:/repo astropy/image-tests-py35-mpl300:1.3 /bin/bash
+
+then run the tests inside ``/repo`` with the ``--mpl-generate-path`` argument, e.g::
+
+    cd repo
+    python3 setup.py test -a "--mpl --mpl-generate-path=reference_tmp" --remote-data
+
+This will create a ``reference_tmp`` folder and put the generated reference
+images inside it - the folder will be available in the repository outside of
+the Docker container. Type ``exit`` to exit the container.
+
+Make sure you generate images for the different supported Matplotlib versions
+using the available containers.
+
+Uploading the reference images
+------------------------------
+
+Next, we need to add these images to the http://data.astropy.org server. To do
+this, open a pull request to `this <https://github.com/astropy/astropy-data>`_
+repository. The reference images for Astropy tests should go inside the
+`testing/astropy <https://github.com/astropy/astropy-data/tree/gh-pages/testing/astropy>`_
+directory. In that directory are folders named as timestamps. If you are simply
+adding new tests, add the reference files to the most recent directory.
+
+If you are re-generating baseline images due to changes in Astropy, make a new
+timestamp directory by copying one the most recent one, then replace any
+baseline images that have changed. Note that due to changes between Matplotlib
+versions, we need to add the whole set of reference images for each major
+Matplotlib version. Therefore, in each timestamp folder, there are folders named
+e.g. ``1.4.x`` and ``1.5.x``.
+
+Once the reference images are merged in and available on
+http://data.astropy.org, update the timestamp in the ``IMAGE_REFERENCE_DIR``
+variable in the ``astropy.tests.image_tests`` sub-module. Because the timestamp
+is hard-coded, adding a new timestamp directory will not mess with testing for
+released versions of Astropy, so you can easily add and tweak a new timestamp
+directory while still working on a pull request to Astropy.
 
 .. _doctests:
 
 Writing doctests
-================
+****************
 
 A doctest in Python is a special kind of test that is embedded in a
 function, class, or module's docstring, or in the narrative Sphinx
@@ -745,11 +864,10 @@ doctests and execute them as part of a project's automated test suite.  This
 way we can automatically ensure that all doctest-like examples in our
 docstrings are correct.
 
-The Astropy test suite automatically detects and runs any doctests in
-the Astropy source code or documentation, or in affiliated packages
-using the Astropy test running framework. For example doctests and
-detailed documentation on how to write them, see the full
-:mod:`doctest` documentation.
+The Astropy test suite automatically detects and runs any doctests in the
+astropy source code or documentation, or in packages using the Astropy test
+running framework. For example doctests and detailed documentation on how to
+write them, see the full :mod:`doctest` documentation.
 
 .. note::
 
@@ -757,8 +875,13 @@ detailed documentation on how to write them, see the full
    the astropy source code, it can only be tested by running ``python
    setup.py test``, not by ``import astropy; astropy.test()``.
 
+For more information on the ``pytest-doctestplus`` plugin used by Astropy, see
+:ref:`doctestplus-plugin`.
+
+.. _skipping-doctests:
+
 Skipping doctests
------------------
+=================
 
 Sometimes it is necessary to write examples that look like doctests but that
 are not actually executable verbatim. An example may depend on some external
@@ -846,7 +969,7 @@ skip a doctest:
 
 
 Skipping output
----------------
+===============
 
 One of the important aspects of writing doctests is that the example output
 can be accurately compared to the actual output produced when running the
@@ -870,9 +993,23 @@ traceback is skipped in the example output--only the first and last lines
 of the output are checked.  See the :mod:`doctest` documentation for
 more examples of skipping output.
 
+Ignoring all output
+-------------------
+
+Another possibility for ignoring output is to use the
+``# doctest: +IGNORE_OUTPUT`` flag.  This allows a doctest to execute (and
+check that the code executes without errors), but allows the entire output
+to be ignored in cases where we don't care what the output is.  This differs
+from using ellipses in that we can still provide complete example output, just
+without the test checking that it is exactly right.  For example::
+
+    >>> print('Hello world')  # doctest: +IGNORE_OUTPUT
+    We don't really care what the output is as long as there were no errors...
+
+.. _handling-float-output:
 
 Handling float output
----------------------
+=====================
 
 Some doctests may produce output that contains string representations of
 floating point values.  Floating point representations are often not exact and
@@ -881,7 +1018,7 @@ the tests are being run on (different Python versions, different OS, etc.) the
 exact number of digits shown can differ.  Because doctests work by comparing
 strings this can cause such tests to fail.
 
-To address this issue Astropy's test framework includes support for a
+To address this issue, the ``pytest-doctestplus`` plugin provides support for a
 ``FLOAT_CMP`` flag that can be used with doctests.  For example:
 
 .. code-block:: none
@@ -896,24 +1033,173 @@ differences in representation of roundoff digits will be ignored by the
 doctest.  The values are otherwise compared exactly, so more significant
 (albeit possibly small) differences will still be caught by these tests.
 
-
 Continuous integration
-----------------------
+**********************
 
-Astropy uses `Travis <https://travis-ci.org/astropy/astropy>`_ for continuous
-integration (CI) on Linux and OSX setups, and `Appveyor
-<https://ci.appveyor.com/project/Astropy/astropy>`_ on Windows. These
-continuously test the package for each commit and pull request that is pushed
-to GitHub to notice when something breaks.
+Overview
+========
+
+Astropy uses the following continuous integration (CI) services:
+
+* `Travis <https://travis-ci.org/astropy/astropy>`_ for
+  64-bit Linux, OS X, and Windows setups
+* `CircleCI <https://circleci.com>`_ for 32-bit Linux,
+  documentation build, and visualization tests
+
+These continuously test the package for each commit and pull request that is
+pushed to GitHub to notice when something breaks.
 
 Astropy and many affiliated packages use an external package called
 `ci-helpers <https://github.com/astropy/astropy-helpers>`_ to provide
 support for the generic parts of the CI systems. ``ci-helpers`` consists of
 a set of scripts that are used by the ``.travis.yml`` and ``appveyor.yml``
-files to setting up the conda environment, and installing dependencies.
+files to set up the conda environment, and install dependencies.
 
 Dependencies can be customized for different packages using the appropriate
-environmental variables in ``.travis.yml`` and ``appveyor.yml``. For more
+environment variables in ``.travis.yml`` and ``appveyor.yml``. For more
 details on how to set up this machinery, see the `package-template
 <https://github.com/astropy/package-template>`_ and `ci-helpers`_.
 
+The 32-bit tests on CircleCI use a pre-defined Docker image defined `here
+<https://github.com/astropy/astropy-docker/>`__ which includes a 32-bit
+Python environment. If you want to run tests for packages in the same way,
+you can use the same set-up on CircleCI as the core package, but just be
+sure to install Astropy first using::
+
+    easy_install pip
+    pip install astropy
+
+For convenience, you can also use the ``astropy/affiliated-32bit-test-env``
+Docker image instead of ``astropy/astropy-32bit-test-env`` - the former includes
+the latest stable version of Astropy pre-installed.
+
+In some cases, you may see failures on continuous integration services that
+you do not see locally, for example because the operating system is different,
+or because the failure happens with only 32-bit Python. The following sections
+explain how you can reproduce specific builds locally.
+
+Reproducing failing 32-bit builds
+=================================
+
+If you want to run your tests in the same 32-bit Python environment that
+CircleCI uses, start off by installing `Docker <https://www.docker.com>`__ if you
+don't already have it installed. Docker can be installed on a variety of
+different operating systems.
+
+Then, make sure you have a version of the git repository (either the main
+Astropy repository or your fork) for which you want to run the tests. Go to that
+directory, then run Docker with::
+
+    $ docker run -i -v ${PWD}:/astropy_src -t astropy/astropy-32bit-test-env:1.6 bash
+
+This will put you in the bash shell inside the Docker container. Once inside,
+you can go to the ``astropy_src`` directory, and you should see the files that
+are in your local git repository::
+
+    root@5e2b89d7b07c:/# cd /astropy_src
+    root@5e2b89d7b07c:/astropy_src# ls
+    ah_bootstrap.py  CONTRIBUTING.md       pip-requirements-doc
+    appveyor.yml     docs                  README.rst
+    astropy          examples              readthedocs.yml
+    astropy_helpers  ez_setup.py           setup.cfg
+    cextern          licenses              setup.py
+    CHANGES.rst      MANIFEST.in           static
+    circle.yml       pip-requirements      CITATION
+    pip-requirements-dev
+
+You can then run the tests with::
+
+    root@5e2b89d7b07c:/astropy_src# python setup.py test
+
+.. _pytest-plugins:
+
+Pytest Plugins
+**************
+
+The following ``pytest`` plugins are maintained and used by Astropy. They are
+included in the ``pytest-astropy`` package, which is now required for testing
+Astropy. More information on all of the  plugins provided by the
+``pytest-astropy`` package (including dependencies not maintained by Astropy)
+can be found `here <https://github.com/astropy/pytest-astropy>`__.
+
+.. _remotedata-plugin:
+
+pytest-remotedata
+=================
+
+The `pytest-remotedata`_ plugin allows developers to control whether to run
+tests that access data from the internet. The plugin provides two decorators
+that can be used to mark individual test functions or entire test classes:
+
+* ``@pytest.mark.remote_data`` for tests that require data from the internet
+* ``@pytest.mark.internet_off`` for tests that should run only when there is no
+  internet access. This is useful for testing local data caches or fallbacks
+  for when no network access is available.
+
+The plugin also adds the ``--remote-data`` option to the ``pytest`` command
+(which is also made available through the Astropy test runner).
+
+If the ``--remote-data`` option is not provided when running the test suite, or
+if ``--remote-data=none`` is provided, all tests that are marked with
+``remote_data`` will be skipped. All tests that are marked with
+``internet_off`` will be executed. Any test that attempts to access the
+internet but is not marked with ``remote_data`` will result in a failure.
+
+Providing either the ``--remote-data`` option, or ``--remote-data=any``, will
+cause all tests marked with ``remote_data`` to be executed. Any tests that are
+marked with ``internet_off`` will be skipped.
+
+Running the tests with ``--remote-data=astropy`` will cause only tests that
+receive remote data from Astropy data sources to be run. Tests with any other
+data sources will be skipped. This is indicated in the test code by marking
+test functions with ``@pytest.mark.remote_data(source='astropy')``. Tests
+marked with ``internet_off`` will also be skipped in this case.
+
+Also see :ref:`data-files`.
+
+.. _pytest-remotedata: https://github.com/astropy/pytest-remotedata
+
+.. _doctestplus-plugin:
+
+pytest-doctestplus
+==================
+
+The `pytest-doctestplus`_ plugin provides advanced doctest features, including:
+
+* handling doctests that use remote data in conjunction with the
+  ``pytest-remotedata`` plugin above (see :ref:`data-files`)
+* approximate floating point comparison for doctests that produce floating
+  point results (see :ref:`handling-float-output`)
+* skipping particular classes, methods, and functions when running doctests
+  (see :ref:`skipping-doctests`)
+* optional inclusion of ``*.rst`` files for doctests
+
+This plugin provides two command line options: ``--doctest-plus`` for enabling
+the advanced features mentioned above, and ``--doctest-rst`` for including
+``*.rst`` files in doctest collection.
+
+The Astropy test runner enables both of these options by default. When running
+the test suite directly from ``pytest`` (instead of through the Astropy test
+runner), it is necessary to explicitly provide these options when they are
+needed.
+
+.. _pytest-doctestplus: https://github.com/astropy/pytest-doctestplus
+
+.. _openfiles-plugin:
+
+pytest-openfiles
+================
+
+The `pytest-openfiles`_ plugin allows for the detection of open I/O resources
+at the end of unit tests. This plugin adds the ``--open-files`` option to the
+``pytest`` command (which is also exposed through the Astropy test runner).
+
+When running tests with ``--open-files``, if a file is opened during the course
+of a unit test but that file  not closed before the test finishes, the test
+will fail. This is particularly useful for testing code that manipulates file
+handles or other I/O resources. It allows developers to ensure that this kind
+of code properly cleans up I/O resources when they are no longer needed.
+
+Also see :ref:`open-files`.
+
+.. _pytest-openfiles: https://github.com/astropy/pytest-openfiles

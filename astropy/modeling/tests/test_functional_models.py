@@ -1,20 +1,33 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-from __future__ import (absolute_import, unicode_literals, division,
-                        print_function)
 
+import pytest
 import numpy as np
-from numpy.testing import assert_allclose, assert_array_equal
-from .. import models
-from ...coordinates import Angle
-from .. import fitting
-from ...tests.helper import pytest
+from numpy.testing import assert_allclose, assert_array_equal, assert_array_less
+
+from astropy.modeling import models, InputParameterError
+from astropy.coordinates import Angle
+from astropy.modeling import fitting
+from astropy.tests.helper import catch_warnings
+from astropy.utils.exceptions import AstropyDeprecationWarning
 
 try:
-    from scipy import optimize
+    from scipy import optimize  # pylint: disable=W0611
     HAS_SCIPY = True
 except ImportError:
     HAS_SCIPY = False
+
+
+def test_sigma_constant():
+    """
+    Test that the GAUSSIAN_SIGMA_TO_FWHM constant matches the
+    gaussian_sigma_to_fwhm constant in astropy.stats. We define
+    it manually in astropy.modeling to avoid importing from
+    astropy.stats.
+    """
+    from astropy.stats.funcs import gaussian_sigma_to_fwhm
+    from astropy.modeling.functional_models import GAUSSIAN_SIGMA_TO_FWHM
+    assert gaussian_sigma_to_fwhm == GAUSSIAN_SIGMA_TO_FWHM
 
 
 def test_Trapezoid1D():
@@ -25,16 +38,6 @@ def test_Trapezoid1D():
     yy = model(xx)
     yy_ref = [0., 1.41428571, 3.12857143, 4.2, 4.2, 3.12857143, 1.41428571, 0.]
     assert_allclose(yy, yy_ref, rtol=0, atol=1e-6)
-
-
-def test_GaussianAbsorption1D():
-    g_em = models.Gaussian1D(0.8, 3000, 20)
-    g_ab = models.GaussianAbsorption1D(0.8, 3000, 20)
-    xx = np.arange(2900, 3100, 2)
-    assert_allclose(g_ab(xx), 1 - g_em(xx))
-    assert_allclose(g_ab.fit_deriv(xx[0], 0.8, 3000, 20),
-                    -np.array(g_em.fit_deriv(xx[0], 0.8, 3000, 20)))
-    assert g_ab.bounding_box == g_em.bounding_box
 
 
 def test_Gaussian2D():
@@ -53,6 +56,8 @@ def test_Gaussian2D():
              [3.91095768, 4.15212857, 4.18567526, 4.00652015, 3.64146544],
              [3.6440466, 3.95922417, 4.08454159, 4.00113878, 3.72161094]]
     assert_allclose(g, g_ref, rtol=0, atol=1e-6)
+    assert_allclose([model.x_fwhm, model.y_fwhm],
+                    [12.009582229657841, 7.7709061486021325])
 
 
 def test_Gaussian2DCovariance():
@@ -90,18 +95,50 @@ def test_Gaussian2DRotation():
     assert_allclose(value1, value2)
 
 
-def test_Redshift():
+def test_Gaussian2D_invalid_inputs():
+    x_stddev = 5.1
+    y_stddev = 3.3
+    theta = 10
+    cov_matrix = [[49., -16.], [-16., 9.]]
+
+    # first make sure the valid ones are OK
+    models.Gaussian2D()
+    models.Gaussian2D(x_stddev=x_stddev, y_stddev=y_stddev, theta=theta)
+    models.Gaussian2D(x_stddev=None, y_stddev=y_stddev, theta=theta)
+    models.Gaussian2D(x_stddev=x_stddev, y_stddev=None, theta=theta)
+    models.Gaussian2D(x_stddev=x_stddev, y_stddev=y_stddev, theta=None)
+    models.Gaussian2D(cov_matrix=cov_matrix)
+
+    with pytest.raises(InputParameterError):
+        models.Gaussian2D(x_stddev=0, cov_matrix=cov_matrix)
+    with pytest.raises(InputParameterError):
+        models.Gaussian2D(y_stddev=0, cov_matrix=cov_matrix)
+    with pytest.raises(InputParameterError):
+        models.Gaussian2D(theta=0, cov_matrix=cov_matrix)
+
+
+@pytest.mark.parametrize('gamma', (10, -10))
+def test_moffat_fwhm(gamma):
+    ans = 34.641016151377542
+    kwargs = {'gamma': gamma, 'alpha': 0.5}
+    m1 = models.Moffat1D(**kwargs)
+    m2 = models.Moffat2D(**kwargs)
+    assert_allclose([m1.fwhm, m2.fwhm], ans)
+    assert_array_less(0, [m1.fwhm, m2.fwhm])
+
+
+def test_RedshiftScaleFactor():
     """Like ``test_ScaleModel()``."""
 
     # Scale by a scalar
-    m = models.Redshift(0.4)
+    m = models.RedshiftScaleFactor(0.4)
     assert m(0) == 0
     assert_array_equal(m([1, 2]), [1.4, 2.8])
 
     assert_allclose(m.inverse(m([1, 2])), [1, 2])
 
     # Scale by a list
-    m = models.Redshift([-0.5, 0, 0.5], model_set_axis=0)
+    m = models.RedshiftScaleFactor([-0.5, 0, 0.5], n_models=3)
     assert_array_equal(m(0), 0)
     assert_array_equal(m([1, 2], model_set_axis=False),
                        [[0.5, 1], [1, 2], [1.5, 3]])
@@ -148,9 +185,64 @@ def test_Scale_inverse():
     assert_allclose(m.inverse(m(6.789)), 6.789)
 
 
+def test_Multiply_inverse():
+    m = models.Multiply(1.2345)
+    assert_allclose(m.inverse(m(6.789)), 6.789)
+
+
 def test_Shift_inverse():
     m = models.Shift(1.2345)
     assert_allclose(m.inverse(m(6.789)), 6.789)
+
+
+@pytest.mark.skipif('not HAS_SCIPY')
+def test_Shift_model_levmar_fit():
+    """Test fitting Shift model with LevMarLSQFitter (issue #6103)."""
+
+    init_model = models.Shift()
+
+    x = np.arange(10)
+    y = x+0.1
+
+    fitter = fitting.LevMarLSQFitter()
+    fitted_model = fitter(init_model, x, y)
+
+    assert_allclose(fitted_model.parameters, [0.1], atol=1e-15)
+
+
+def test_Shift_model_set_linear_fit():
+    """Test linear fitting of Shift model (issue #6103)."""
+
+    init_model = models.Shift(offset=[0, 0], n_models=2)
+
+    x = np.arange(10)
+    yy = np.array([x+0.1, x-0.2])
+
+    fitter = fitting.LinearLSQFitter()
+    fitted_model = fitter(init_model, x, yy)
+
+    assert_allclose(fitted_model.parameters, [0.1, -0.2], atol=1e-15)
+
+
+@pytest.mark.parametrize('Model', (models.Scale, models.Multiply))
+def test_Scale_model_set_linear_fit(Model):
+    """Test linear fitting of Scale model (#6103)."""
+
+    init_model = Model(factor=[0, 0], n_models=2)
+
+    x = np.arange(-3, 7)
+    yy = np.array([1.15*x, 0.96*x])
+
+    fitter = fitting.LinearLSQFitter()
+    fitted_model = fitter(init_model, x, yy)
+
+    assert_allclose(fitted_model.parameters, [1.15, 0.96], atol=1e-15)
+
+
+# https://github.com/astropy/astropy/issues/6178
+def test_Ring2D_rout():
+    m = models.Ring2D(amplitude=1, x_0=1, y_0=1, r_in=2, r_out=5)
+    assert m.width.value == 3
 
 
 @pytest.mark.skipif("not HAS_SCIPY")
@@ -162,3 +254,14 @@ def test_Voigt1D():
     fitter = fitting.LevMarLSQFitter()
     voi_fit = fitter(voi_init, xarr, yarr)
     assert_allclose(voi_fit.param_sets, voi.param_sets)
+
+
+@pytest.mark.skipif("not HAS_SCIPY")
+def test_KingProjectedAnalytic1D_fit():
+    km = models.KingProjectedAnalytic1D(amplitude=1, r_core=1, r_tide=2)
+    xarr = np.linspace(0.1, 2, 10)
+    yarr = km(xarr)
+    km_init = models.KingProjectedAnalytic1D(amplitude=1, r_core=1, r_tide=1)
+    fitter = fitting.LevMarLSQFitter()
+    km_fit = fitter(km_init, xarr, yarr)
+    assert_allclose(km_fit.param_sets, km.param_sets)

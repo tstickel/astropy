@@ -1,14 +1,12 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-# TEST_UNICODE_LITERALS
+from collections import OrderedDict, UserDict
+from collections.abc import Mapping
 
-from __future__ import print_function  # For print debugging with python 2 or 3
-
+import pytest
 import numpy as np
 
-from ...tests.helper import pytest
-from ...table import Column, TableColumns
-from ...utils import OrderedDict
+from astropy.table import Column, TableColumns
 
 
 class TestTableColumnsInit():
@@ -18,19 +16,19 @@ class TestTableColumnsInit():
         x1 = np.arange(10.)
         x2 = np.arange(5.)
         x3 = np.arange(7.)
-        col_list = [('x1',x1), ('x2',x2), ('x3',x3)]
+        col_list = [('x1', x1), ('x2', x2), ('x3', x3)]
         tc_list = TableColumns(col_list)
         for col in col_list:
             assert col[0] in tc_list
             assert tc_list[col[0]] is col[1]
 
-        col_tuple = (('x1',x1), ('x2',x2), ('x3',x3))
+        col_tuple = (('x1', x1), ('x2', x2), ('x3', x3))
         tc_tuple = TableColumns(col_tuple)
         for col in col_tuple:
             assert col[0] in tc_tuple
             assert tc_tuple[col[0]] is col[1]
 
-        col_dict = dict([('x1',x1), ('x2',x2), ('x3',x3)])
+        col_dict = dict([('x1', x1), ('x2', x2), ('x3', x3)])
         tc_dict = TableColumns(col_dict)
         for col in tc_dict.keys():
             assert col in tc_dict
@@ -43,7 +41,7 @@ class TestTableColumnsInit():
             assert tc[col.name] is col
 
 
-#pytest.mark.usefixtures('table_type')
+# pytest.mark.usefixtures('table_type')
 class BaseInitFrom():
     def _setup(self, table_type):
         pass
@@ -78,6 +76,7 @@ class BaseInitFrom():
         self._setup(table_type)
         with pytest.raises(ValueError):
             table_type(self.data, names=('a',), dtype=('i4'))
+
 
 @pytest.mark.usefixtures('table_type')
 class BaseInitFromListLike(BaseInitFrom):
@@ -226,13 +225,14 @@ class TestInitFromColsList(BaseInitFromListLike):
         t['x'][0] = 100
         assert self.data[0][0] == 100
 
+
 @pytest.mark.usefixtures('table_type')
 class TestInitFromNdarrayStruct(BaseInitFromDictLike):
 
     def _setup(self, table_type):
         self.data = np.array([(1, 2, 3),
                               (3, 4, 5)],
-                             dtype=[(str('x'), 'i8'), (str('y'), 'i4'), (str('z'), 'i8')])
+                             dtype=[('x', 'i8'), ('y', 'i4'), ('z', 'i8')])
 
     def test_ndarray_ref(self, table_type):
         """Init with ndarray and copy=False and show that table uses reference
@@ -276,6 +276,17 @@ class TestInitFromDict(BaseInitFromDictLike):
 
 
 @pytest.mark.usefixtures('table_type')
+class TestInitFromMapping(BaseInitFromDictLike):
+
+    def _setup(self, table_type):
+        self.data = UserDict([('a', Column([1, 3], name='x')),
+                              ('b', [2, 4]),
+                              ('c', np.array([3, 5], dtype='i8'))])
+        assert isinstance(self.data, Mapping)
+        assert not isinstance(self.data, dict)
+
+
+@pytest.mark.usefixtures('table_type')
 class TestInitFromOrderedDict(BaseInitFromDictLike):
 
     def _setup(self, table_type):
@@ -295,7 +306,7 @@ class TestInitFromRow(BaseInitFromDictLike):
     def _setup(self, table_type):
         arr = np.array([(1, 2, 3),
                         (3, 4, 5)],
-                       dtype=[(str('x'), 'i8'), (str('y'), 'i8'), (str('z'), 'f8')])
+                       dtype=[('x', 'i8'), ('y', 'i8'), ('z', 'f8')])
         self.data = table_type(arr, meta={'comments': ['comment1', 'comment2']})
 
     def test_init_from_row(self, table_type):
@@ -315,13 +326,14 @@ class TestInitFromRow(BaseInitFromDictLike):
         assert np.all(self.data['x'] == np.array([1, 3]))
         assert self.data.meta['comments'][1] == 'comment2'
 
+
 @pytest.mark.usefixtures('table_type')
 class TestInitFromTable(BaseInitFromDictLike):
 
     def _setup(self, table_type):
         arr = np.array([(1, 2, 3),
                         (3, 4, 5)],
-                       dtype=[(str('x'), 'i8'), (str('y'), 'i8'), (str('z'), 'f8')])
+                       dtype=[('x', 'i8'), ('y', 'i8'), ('z', 'f8')])
         self.data = table_type(arr, meta={'comments': ['comment1', 'comment2']})
 
     def test_data_meta_copy(self, table_type):
@@ -394,11 +406,11 @@ class TestInitFromNone():
         """
         Test different ways of initing an empty table
         """
-        np_t = np.empty(0, dtype=[(str('a'), 'f4', (2,)),
-                                  (str('b'), 'i4')])
+        np_t = np.empty(0, dtype=[('a', 'f4', (2,)),
+                                  ('b', 'i4')])
         for kwargs in ({'names': ('a', 'b')},
                        {'names': ('a', 'b'), 'dtype': (('f4', (2,)), 'i4')},
-                       {'dtype': [(str('a'), 'f4', (2,)), (str('b'), 'i4')]},
+                       {'dtype': [('a', 'f4', (2,)), ('b', 'i4')]},
                        {'dtype': np_t.dtype}):
             t = table_type(**kwargs)
             assert t.colnames == ['a', 'b']
@@ -440,7 +452,8 @@ class TestInitFromRows():
     def test_init_with_rows_and_data(self, table_type):
         with pytest.raises(ValueError) as err:
             table_type(data=[[1]], rows=[[1]])
-        assert "Cannot supply both `data` and `rows` values" in str(err)
+        assert "Cannot supply both `data` and `rows` values" in str(err.value)
+
 
 @pytest.mark.usefixtures('table_type')
 def test_init_and_ref_from_multidim_ndarray(table_type):
@@ -452,7 +465,7 @@ def test_init_and_ref_from_multidim_ndarray(table_type):
     for copy in (False, True):
         nd = np.array([(1, [10, 20]),
                        (3, [30, 40])],
-                      dtype=[(str('a'), 'i8'), (str('b'), 'i8', (2,))])
+                      dtype=[('a', 'i8'), ('b', 'i8', (2,))])
         t = table_type(nd, copy=copy)
         assert t.colnames == ['a', 'b']
         assert t['a'].shape == (2,)
@@ -460,8 +473,49 @@ def test_init_and_ref_from_multidim_ndarray(table_type):
         t['a'][0] = -200
         t['b'][1][1] = -100
         if copy:
-            assert nd[str('a')][0] == 1
-            assert nd[str('b')][1][1] == 40
+            assert nd['a'][0] == 1
+            assert nd['b'][1][1] == 40
         else:
-            assert nd[str('a')][0] == -200
-            assert nd[str('b')][1][1] == -100
+            assert nd['a'][0] == -200
+            assert nd['b'][1][1] == -100
+
+
+@pytest.mark.usefixtures('table_type')
+@pytest.mark.parametrize('copy', [False, True])
+def test_init_and_ref_from_dict(table_type, copy):
+    """
+    Test that initializing from a dict works for both copy=False and True and that
+    the referencing is as expected.
+    """
+    x1 = np.arange(10.)
+    x2 = np.zeros(10)
+    col_dict = dict([('x1', x1), ('x2', x2)])
+    t = table_type(col_dict, copy=copy)
+    assert set(t.colnames) == set(['x1', 'x2'])
+    assert t['x1'].shape == (10,)
+    assert t['x2'].shape == (10,)
+    t['x1'][0] = -200
+    t['x2'][1] = -100
+    if copy:
+        assert x1[0] == 0.
+        assert x2[1] == 0.
+    else:
+        assert x1[0] == -200
+        assert x2[1] == -100
+
+
+@pytest.mark.usefixtures('table_type')
+def test_init_from_row_OrderedDict(table_type):
+    row1 = OrderedDict([('b', 1), ('a', 0)])
+    row2 = {'a': 10, 'b': 20}
+    rows12 = [row1, row2]
+    row3 = dict([('b', 1), ('a', 0)])
+    row4 = dict([('b', 11), ('a', 10)])
+    rows34 = [row3, row4]
+    t1 = table_type(rows=rows12)
+    t2 = table_type(rows=rows34)
+    assert t1.colnames == ['b', 'a']
+    assert t2.colnames == ['a', 'b']
+
+    with pytest.raises(ValueError):
+        table_type(rows=[OrderedDict([('b', 1)]), {'a': 10, 'b': 20}])

@@ -1,21 +1,19 @@
 # -*- coding: utf-8 -*-
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
 
-import io
 import os
 import sys
+import subprocess
 
-from ...tests.helper import catch_warnings
-from ...extern import six
-from ...utils.compat import subprocess
+import pytest
 
-from ...utils.data import get_pkg_data_filename
-from .. import configuration
-from .. import paths
-from ...utils.exceptions import AstropyDeprecationWarning
+from astropy.tests.helper import catch_warnings
+
+from astropy.utils.data import get_pkg_data_filename
+from astropy.config import configuration
+from astropy.config import paths
+from astropy.utils.exceptions import AstropyDeprecationWarning
 
 
 def test_paths():
@@ -74,7 +72,7 @@ def test_set_temp_cache(tmpdir, monkeypatch):
 
 
 def test_config_file():
-    from ..configuration import get_config, reload_config
+    from astropy.config.configuration import get_config, reload_config
 
     apycfg = get_config('astropy')
     assert apycfg.filename.endswith('astropy.cfg')
@@ -88,13 +86,21 @@ def test_config_file():
 
 
 def test_configitem():
-    from ..configuration import ConfigurationItem, get_config
 
-    ci = ConfigurationItem('tstnm', 34, 'this is a Description')
+    from astropy.config.configuration import ConfigNamespace, ConfigItem, get_config
+
+    ci = ConfigItem(34, 'this is a Description')
+
+    class Conf(ConfigNamespace):
+        tstnm = ci
+
+    conf = Conf()
 
     assert ci.module == 'astropy.config.tests.test_configs'
     assert ci() == 34
     assert ci.description == 'this is a Description'
+
+    assert conf.tstnm == 34
 
     sec = get_config(ci.module)
     assert sec['tstnm'] == 34
@@ -111,38 +117,47 @@ def test_configitem():
 
 
 def test_configitem_types():
-    from ..configuration import ConfigurationItem
-    from ...tests.helper import pytest
 
-    ci1 = ConfigurationItem('tstnm1', 34)
-    assert isinstance(ci1(), int)
+    from astropy.config.configuration import ConfigNamespace, ConfigItem
 
-    ci2 = ConfigurationItem('tstnm2', 34.3)
-    assert isinstance(ci2(), float)
+    cio = ConfigItem(['op1', 'op2', 'op3'])
 
-    ci3 = ConfigurationItem('tstnm3', True)
-    assert isinstance(ci3(), bool)
+    class Conf(ConfigNamespace):
+        tstnm1 = ConfigItem(34)
+        tstnm2 = ConfigItem(34.3)
+        tstnm3 = ConfigItem(True)
+        tstnm4 = ConfigItem('astring')
 
-    ci4 = ConfigurationItem('tstnm4', 'astring')
-    assert isinstance(ci4(), six.text_type)
+    conf = Conf()
+
+    assert isinstance(conf.tstnm1, int)
+    assert isinstance(conf.tstnm2, float)
+    assert isinstance(conf.tstnm3, bool)
+    assert isinstance(conf.tstnm4, str)
 
     with pytest.raises(TypeError):
-        ci1.set(34.3)
-    ci2.set(12)  # this would should succeed as up-casting
+        conf.tstnm1 = 34.3
+    conf.tstnm2 = 12  # this would should succeed as up-casting
     with pytest.raises(TypeError):
-        ci3.set('fasd')
+        conf.tstnm3 = 'fasd'
     with pytest.raises(TypeError):
-        ci4.set(546.245)
+        conf.tstnm4 = 546.245
 
 
 def test_configitem_options(tmpdir):
-    from ..configuration import ConfigurationItem, get_config
-    from ...tests.helper import pytest
 
-    cio = ConfigurationItem('tstnmo', ['op1', 'op2', 'op3'])
+    from astropy.config.configuration import ConfigNamespace, ConfigItem, get_config
+
+    cio = ConfigItem(['op1', 'op2', 'op3'])
+
+    class Conf(ConfigNamespace):
+        tstnmo = cio
+
+    conf = Conf()
+
     sec = get_config(cio.module)
 
-    assert isinstance(cio(), six.text_type)
+    assert isinstance(cio(), str)
     assert cio() == 'op1'
     assert sec['tstnmo'] == 'op1'
 
@@ -156,9 +171,9 @@ def test_configitem_options(tmpdir):
     while apycfg.parent is not apycfg:
         apycfg = apycfg.parent
     f = tmpdir.join('astropy.cfg')
-    with io.open(f.strpath, 'wb') as fd:
+    with open(f.strpath, 'wb') as fd:
         apycfg.write(fd)
-    with io.open(f.strpath, 'rU', encoding='utf-8') as fd:
+    with open(f.strpath, 'r', encoding='utf-8') as fd:
         lns = [x.strip() for x in f.readlines()]
 
     assert 'tstnmo = op2' in lns
@@ -169,11 +184,10 @@ def test_config_noastropy_fallback(monkeypatch):
     Tests to make sure configuration items fall back to their defaults when
     there's a problem accessing the astropy directory
     """
-    from ...tests.helper import pytest
 
     # make sure the config directory is not searched
-    monkeypatch.setenv(str('XDG_CONFIG_HOME'), 'foo')
-    monkeypatch.delenv(str('XDG_CONFIG_HOME'))
+    monkeypatch.setenv('XDG_CONFIG_HOME', 'foo')
+    monkeypatch.delenv('XDG_CONFIG_HOME')
     monkeypatch.setattr(paths.set_temp_config, '_temp_path', None)
 
     # make sure the _find_or_create_astropy_dir function fails as though the
@@ -199,36 +213,40 @@ def test_config_noastropy_fallback(monkeypatch):
 
 
 def test_configitem_setters():
-    from ..configuration import ConfigurationItem
 
-    ci = ConfigurationItem('tstnm12', 42, 'this is another Description')
+    from astropy.config.configuration import ConfigNamespace, ConfigItem
 
-    assert ci() == 42
-    with ci.set_temp(45):
-        assert ci() == 45
-    assert ci() == 42
+    class Conf(ConfigNamespace):
+        tstnm12 = ConfigItem(42, 'this is another Description')
 
-    ci.set(43)
-    assert ci() == 43
+    conf = Conf()
 
-    with ci.set_temp(46):
-        assert ci() == 46
+    assert conf.tstnm12 == 42
+    with conf.set_temp('tstnm12', 45):
+        assert conf.tstnm12 == 45
+    assert conf.tstnm12 == 42
+
+    conf.tstnm12 = 43
+    assert conf.tstnm12 == 43
+
+    with conf.set_temp('tstnm12', 46):
+        assert conf.tstnm12 == 46
 
     # Make sure it is reset even with Exception
     try:
-        with ci.set_temp(47):
+        with conf.set_temp('tstnm12', 47):
             raise Exception
-    except:
+    except Exception:
         pass
 
-    assert ci() == 43
+    assert conf.tstnm12 == 43
 
 
 def test_empty_config_file():
-    from ..configuration import is_unedited_config_file
+    from astropy.config.configuration import is_unedited_config_file
 
     def get_content(fn):
-        with io.open(get_pkg_data_filename(fn), 'rt', encoding='latin-1') as fd:
+        with open(get_pkg_data_filename(fn), 'rt', encoding='latin-1') as fd:
             return fd.read()
 
     content = get_content('data/empty.cfg')
@@ -244,66 +262,8 @@ def test_empty_config_file():
     assert is_unedited_config_file(content)
 
 
-def test_alias():
-    import astropy
+class TestAliasRead:
 
-    with catch_warnings() as w:
-        with astropy.UNICODE_OUTPUT.set_temp(False):
-            pass
-
-    assert len(w) == 1
-    assert str(w[0].message) == (
-        "Since 0.4, config parameter 'astropy.UNICODE_OUTPUT' is deprecated. "
-        "Use 'astropy.conf.unicode_output' instead.")
-
-
-def test_alias2():
-    from ...coordinates import name_resolve
-    from ...utils.data import conf
-
-    # REMOVE in astropy 0.5
-
-    with catch_warnings() as w:
-        x = name_resolve.NAME_RESOLVE_TIMEOUT()
-    assert x == 3
-    assert len(w) == 1
-    assert str(w[0].message) == (
-        "Since 0.4, config parameter "
-        "'astropy.coordinates.name_resolve.NAME_RESOLVE_TIMEOUT' is deprecated. "
-        "Use 'astropy.utils.data.conf.remote_timeout' instead.")
-
-    with catch_warnings() as w:
-        name_resolve.NAME_RESOLVE_TIMEOUT.set(10)
-    assert conf.remote_timeout == 10
-    assert len(w) == 1
-    assert str(w[0].message) == (
-        "Since 0.4, config parameter "
-        "'astropy.coordinates.name_resolve.NAME_RESOLVE_TIMEOUT' is deprecated. "
-        "Use 'astropy.utils.data.conf.remote_timeout' instead.")
-
-    with catch_warnings() as w:
-        with name_resolve.NAME_RESOLVE_TIMEOUT.set_temp(42):
-            assert conf.remote_timeout == 42
-    assert len(w) == 1
-    assert str(w[0].message) == (
-        "Since 0.4, config parameter "
-        "'astropy.coordinates.name_resolve.NAME_RESOLVE_TIMEOUT' is deprecated. "
-        "Use 'astropy.utils.data.conf.remote_timeout' instead.")
-    assert name_resolve.NAME_RESOLVE_TIMEOUT() == 10
-    assert conf.remote_timeout == 10
-
-    with catch_warnings() as w:
-        name_resolve.NAME_RESOLVE_TIMEOUT.reload()
-    assert len(w) == 1
-    assert str(w[0].message) == (
-        "Since 0.4, config parameter "
-        "'astropy.coordinates.name_resolve.NAME_RESOLVE_TIMEOUT' is deprecated. "
-        "Use 'astropy.utils.data.conf.remote_timeout' instead.")
-    assert x == 3
-    assert name_resolve.NAME_RESOLVE_TIMEOUT() == 3
-
-
-class TestAliasRead(object):
     def setup_class(self):
         configuration._override_config_file = get_pkg_data_filename('data/alias.cfg')
 
@@ -327,20 +287,27 @@ class TestAliasRead(object):
 
 
 def test_configitem_unicode(tmpdir):
-    from ..configuration import ConfigurationItem, get_config
 
-    cio = ConfigurationItem('астрономия', 'ასტრონომიის')
+    from astropy.config.configuration import ConfigNamespace, ConfigItem, get_config
+
+    cio = ConfigItem('ასტრონომიის')
+
+    class Conf(ConfigNamespace):
+        tstunicode = cio
+
+    conf = Conf()
+
     sec = get_config(cio.module)
 
-    assert isinstance(cio(), six.text_type)
+    assert isinstance(cio(), str)
     assert cio() == 'ასტრონომიის'
-    assert sec['астрономия'] == 'ასტრონომიის'
+    assert sec['tstunicode'] == 'ასტრონომიის'
 
 
 def test_warning_move_to_top_level():
     # Check that the warning about deprecation config items in the
     # file works.  See #2514
-    from ... import conf
+    from astropy import conf
 
     configuration._override_config_file = get_pkg_data_filename('data/deprecated.cfg')
 
@@ -367,7 +334,7 @@ def test_no_home():
     paths = [astropy_path]
     if env.get('PYTHONPATH'):
         paths.append(env.get('PYTHONPATH'))
-    env[str('PYTHONPATH')] = str(os.pathsep.join(paths))
+    env['PYTHONPATH'] = os.pathsep.join(paths)
 
     for val in ['HOME', 'XDG_CONFIG_HOME']:
         if val in env:

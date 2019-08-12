@@ -49,22 +49,20 @@ Explanation of keywords of the dictionaries:
     values for the fit (optional)
 """
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
 
-from ..functional_models import (
+from astropy.modeling.functional_models import (
     Gaussian1D, Sine1D, Box1D, Linear1D, Lorentz1D,
     MexicanHat1D, Trapezoid1D, Const1D, Moffat1D,
     Gaussian2D, Const2D, Box2D, MexicanHat2D,
     TrapezoidDisk2D, AiryDisk2D, Moffat2D, Disk2D,
-    Ring2D, Sersic1D, Sersic2D, Voigt1D)
-from ..polynomial import Polynomial1D, Polynomial2D
-from ..powerlaws import (
-    PowerLaw1D, BrokenPowerLaw1D, ExponentialCutoffPowerLaw1D,
+    Ring2D, Sersic1D, Sersic2D, Voigt1D, Planar2D, KingProjectedAnalytic1D)
+from astropy.modeling.polynomial import Polynomial1D, Polynomial2D
+from astropy.modeling.powerlaws import (
+    PowerLaw1D, BrokenPowerLaw1D, SmoothlyBrokenPowerLaw1D, ExponentialCutoffPowerLaw1D,
     LogParabola1D)
 import numpy as np
 
-#1D Models
+# 1D Models
 models_1D = {
     Gaussian1D: {
         'parameters': [1, 0, 1],
@@ -159,6 +157,15 @@ models_1D = {
         'log_fit': True
     },
 
+    SmoothlyBrokenPowerLaw1D: {
+        'parameters': [1, 1, -2, 2, 0.5],
+        'constraints': {'fixed': {'x_break': True, 'delta': True}},
+        'x_values': [0.01, 1, 100],
+        'y_values': [3.99920012e-04, 1.0, 3.99920012e-04],
+        'x_lim': [0.01, 100],
+        'log_fit': True
+    },
+
     ExponentialCutoffPowerLaw1D: {
         'parameters': [1, 1, 2, 3],
         'constraints': {'fixed': {'x_0': True}},
@@ -192,7 +199,7 @@ models_1D = {
         'y_values': [2.78629391e+02, 5.69791430e+01, 3.38788244e+00,
                      2.23941982e-02],
         'requires_scipy': True,
-        'x_lim': [0,10],
+        'x_lim': [0, 10],
         'log_fit': True
     },
 
@@ -201,7 +208,15 @@ models_1D = {
         'x_values': [0, 2, 4, 8, 10],
         'y_values': [0.520935, 0.017205, 0.003998, 0.000983, 0.000628],
         'x_lim': [-3, 3]
-     }
+     },
+
+    KingProjectedAnalytic1D: {
+        'parameters': [1, 1, 2],
+        'x_values': [0, 0.1, 0.5, 0.8],
+        'y_values': [0.30557281, 0.30011069, 0.2, 0.1113258],
+        'x_lim': [0, 10],
+        'y_lim': [0, 10],
+    }
 }
 
 
@@ -316,5 +331,15 @@ models_2D = {
         'requires_scipy': True,
         'x_lim': [1, 1e10],
         'y_lim': [1, 1e10]
+    },
+
+    Planar2D: {
+        'parameters': [1, 1, 0],
+        'x_values': [0, np.pi, 42, -1],
+        'y_values': [np.pi, 0, -1, 42],
+        'z_values': [np.pi, np.pi, 41, 41],
+        'x_lim': [-10, 10],
+        'y_lim': [-10, 10],
+        'integral': 0
     }
 }

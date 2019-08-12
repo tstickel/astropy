@@ -1,16 +1,13 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 # Tests of NDDataBase
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
 
-from ..nddata_base import NDDataBase
-from ...tests.helper import pytest
+from astropy.nddata.nddata_base import NDDataBase
 
 
 class MinimalSubclass(NDDataBase):
     def __init__(self):
-        super(MinimalSubclass, self).__init__()
+        super().__init__()
 
     @property
     def data(self):
@@ -18,31 +15,23 @@ class MinimalSubclass(NDDataBase):
 
     @property
     def mask(self):
-        return super(MinimalSubclass, self).mask
+        return super().mask
 
     @property
     def unit(self):
-        return super(MinimalSubclass, self).unit
+        return super().unit
 
     @property
     def wcs(self):
-        return super(MinimalSubclass, self).wcs
+        return super().wcs
 
     @property
     def meta(self):
-        return super(MinimalSubclass, self).meta
-
-
-class MinimalUncertainty(object):
-    """
-    Define the minimum attributes acceptable as an uncertainty object.
-    """
-    def __init__(self, value):
-        self._uncertainty = value
+        return super().meta
 
     @property
-    def uncertainty_type(self):
-        return "totally and completely fake"
+    def uncertainty(self):
+        return super().uncertainty
 
 
 def test_nddata_base_subclass():
@@ -52,9 +41,4 @@ def test_nddata_base_subclass():
     assert a.mask is None
     assert a.unit is None
     assert a.wcs is None
-    good_uncertainty = MinimalUncertainty(5)
-    a.uncertainty = good_uncertainty
-    assert a.uncertainty is good_uncertainty
-    bad_uncertainty = 5
-    with pytest.raises(TypeError):
-        a.uncertainty = bad_uncertainty
+    assert a.uncertainty is None

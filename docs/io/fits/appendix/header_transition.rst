@@ -32,7 +32,7 @@ Background
 ==========
 
 Prior to 3.1, PyFITS users interacted with FITS headers by way of three
-different classes: :class:`Card`, :class:`CardList`, and :class:`Header`.
+different classes: :class:`Card`, ``CardList``, and :class:`Header`.
 
 The Card class represents a single header card with a keyword, value, and
 comment.  It also contains all the machinery for parsing FITS header cards,
@@ -67,7 +67,7 @@ Users familiar with the FITS format know what a header is, but it's not clear
 how a "card list" is distinct from that, or why operations go through the
 Header object, while some have to be performed through the CardList.
 
-So the primary goal of this redesign was eliminate the :class:`CardList` class
+So the primary goal of this redesign was eliminate the ``CardList`` class
 altogether, and make it possible for users to perform all header manipulations
 directly through :class:`Header` objects.  It also tries to present headers as
 similar as possible to more a more familiar data structure--an ordered mapping
@@ -87,20 +87,20 @@ This will output any deprecation warnings to the console.
 
 Two of the most common deprecation warnings related to Headers are for:
 
-- :meth:``Header.has_key``--this has actually been deprecated since PyFITS 3.0,
+- ``Header.has_key``--this has actually been deprecated since PyFITS 3.0,
   just as Python's `dict.has_key` is deprecated.  For checking a key's presence
   in a mapping object like `dict` or :class:`Header`, use the ``key in d``
   syntax.  This has long been the preference in Python.
 
-- :meth:``Header.ascardlist`` and :attr:`Header.ascard`--these were used to
-  access the :class:`CardList` object underlying a header.  They should still
+- ``Header.ascardlist`` and ``Header.ascard``--these were used to
+  access the ``CardList`` object underlying a header.  They should still
   work, and return a skeleton CardList implementation that should support most
   of the old CardList functionality.  But try removing as much of this as
   possible.  If direct access to the :class:`Card` objects making up a header
   is necessary, use :attr:`Header.cards`, which returns an iterator over the
   cards.  More on that below.
 
-.. _PEP 8: http://www.python.org/dev/peps/pep-0008/
+.. _PEP 8: https://www.python.org/dev/peps/pep-0008/
 
 New Header Design
 =================
@@ -202,7 +202,7 @@ surprises.  There are differences, however:
   as with a normal `dict`, ``header['NAXIS'] = 1`` will either update the NAXIS
   keyword if it already exists, or add a new NAXIS keyword with a value of
   ``1`` if it does not exist.  In the old interface this would return a
-  `~.exceptions.KeyError` if NAXIS did not exist, and the only way to add a new
+  `KeyError` if NAXIS did not exist, and the only way to add a new
   keyword was through the update() method.
 
   By default, new keywords added in this manner are added to the end of the
@@ -260,7 +260,7 @@ surprises.  There are differences, however:
   nothing.  For backwards-compatibility it is still okay to delete a
   non-existent keyword, but a warning will be raised.  In the future this
   *will* be changed so that trying to delete a non-existent keyword raises a
-  `~.exceptions.KeyError`.  This is for consistency with the behavior of Python dicts.  So
+  `KeyError`.  This is for consistency with the behavior of Python dicts.  So
   unless you know for certain that a keyword exists before deleting it, it's
   best to do something like::
 
@@ -317,7 +317,7 @@ surprises.  There are differences, however:
   returns a new header containing only the NAXIS and NAXISn cards from the
   original header.
 
-.. _duck typing: http://en.wikipedia.org/wiki/Duck_typing
+.. _duck typing: https://en.wikipedia.org/wiki/Duck_typing
 
 
 Transition Tips
@@ -337,7 +337,7 @@ much--the deprecated interfaces will not be removed for several more versions
 because of this.
 
 - The first change worth making, which is supported by any PyFITS version in
-  the last several years, is remove any use of :meth:``Header.has_key`` and
+  the last several years, is remove any use of ``Header.has_key`` and
   replace it with ``keyword in header`` syntax.  It's worth making this change
   for any dict as well, since `dict.has_key` is deprecated.  Running the
   following regular expression over your code may help with most (but not all)
@@ -406,10 +406,8 @@ Other Gotchas
   return just ``'Value'``.
 
   There is, however, one convention used by the IRAF ccdmosaic task for
-  representing its `TNX World Coordinate System
-  <http://iraf.noao.edu/projects/ccdmosaic/tnx.html>`_ and `ZPX World
-  Coordinate System <http://iraf.noao.edu/projects/ccdmosaic/zpx.html>`_
-  non-standard WCS' that uses a series of keywords in the form ``WATj_nnn``
+  representing its TNX World Coordinate System and ZPX World Coordinate System
+  non-standard WCS that uses a series of keywords in the form ``WATj_nnn``
   which store a text description of coefficients for a non-linear distortion
   projection.  It uses its own microformat for listing the coefficients as a
   string, but the string is long, and thus broken up into several of these

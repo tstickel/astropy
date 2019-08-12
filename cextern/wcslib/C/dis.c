@@ -1,7 +1,7 @@
 /*============================================================================
 
-  WCSLIB 5.10 - an implementation of the FITS WCS standard.
-  Copyright (C) 1995-2015, Mark Calabretta
+  WCSLIB 6.2 - an implementation of the FITS WCS standard.
+  Copyright (C) 1995-2018, Mark Calabretta
 
   This file is part of WCSLIB.
 
@@ -22,7 +22,7 @@
 
   Author: Mark Calabretta, Australia Telescope National Facility, CSIRO.
   http://www.atnf.csiro.au/people/Mark.Calabretta
-  $Id: dis.c,v 5.10 2015/10/09 08:19:15 mcalabre Exp $
+  $Id: dis.c,v 6.2 2018/10/20 10:03:13 mcalabre Exp $
 *===========================================================================*/
 
 #include <math.h>
@@ -146,14 +146,50 @@ int dpfill(
 
 /*--------------------------------------------------------------------------*/
 
+int dpkeyi(const struct dpkey *dp)
+
+{
+  if (dp->type != 0) {
+    return (int)dp->value.f;
+  }
+
+  return dp->value.i;
+}
+
+/*--------------------------------------------------------------------------*/
+
+double dpkeyd(const struct dpkey *dp)
+
+{
+  if (dp->type == 0) {
+    return (double)dp->value.i;
+  }
+
+  return dp->value.f;
+}
+
+/*--------------------------------------------------------------------------*/
+
 int disini(int alloc, int naxis, struct disprm *dis)
 
 {
-  static const char *function = "disini";
+  return disinit(alloc, naxis, dis, -1);
+}
+
+/*--------------------------------------------------------------------------*/
+
+int disinit(int alloc, int naxis, struct disprm *dis, int ndpmax)
+
+{
+  static const char *function = "disinit";
 
   struct wcserr **err;
 
+  /* Check inputs. */
   if (dis == 0x0) return DISERR_NULL_POINTER;
+
+  if (ndpmax < 0) ndpmax = disndp(-1);
+
 
   /* Initialize error message handling. */
   err = &(dis->err);
@@ -197,13 +233,13 @@ int disini(int alloc, int naxis, struct disprm *dis)
   /* Allocate memory for arrays if required. */
   if (alloc ||
       dis->dtype  == 0x0 ||
-      (NDPMAX && dis->dp == 0x0) ||
+      (ndpmax && dis->dp == 0x0) ||
       dis->maxdis == 0x0) {
 
     /* Was sufficient allocated previously? */
     if (dis->m_flag == DISSET &&
        (dis->m_naxis < naxis  ||
-        dis->ndpmax  < NDPMAX)) {
+        dis->ndpmax  < ndpmax)) {
       /* No, free it. */
       disfree(dis);
     }
@@ -231,8 +267,8 @@ int disini(int alloc, int naxis, struct disprm *dis)
         dis->dp = dis->m_dp;
 
       } else {
-        if (NDPMAX) {
-          if ((dis->dp = calloc(NDPMAX, sizeof(struct dpkey))) == 0x0) {
+        if (ndpmax) {
+          if ((dis->dp = calloc(ndpmax, sizeof(struct dpkey))) == 0x0) {
             disfree(dis);
             return wcserr_set(DIS_ERRMSG(DISERR_MEMORY));
           }
@@ -240,7 +276,7 @@ int disini(int alloc, int naxis, struct disprm *dis)
           dis->dp = 0x0;
         }
 
-        dis->ndpmax  = NDPMAX;
+        dis->ndpmax  = ndpmax;
 
         dis->m_flag  = DISSET;
         dis->m_naxis = naxis;
@@ -273,7 +309,7 @@ int disini(int alloc, int naxis, struct disprm *dis)
 
   memset(dis->dtype,  0, naxis*sizeof(char [72]));
   dis->ndp = 0;
-  memset(dis->dp,     0, NDPMAX*sizeof(struct dpkey));
+  memset(dis->dp,     0, ndpmax*sizeof(struct dpkey));
   memset(dis->maxdis, 0, naxis*sizeof(double));
   dis->totdis = 0.0;
 
@@ -288,7 +324,7 @@ int discpy(int alloc, const struct disprm *dissrc, struct disprm *disdst)
 {
   static const char *function = "discpy";
 
-  int naxis, ndp, status;
+  int naxis, status;
   struct wcserr **err;
 
   if (dissrc == 0x0) return DISERR_NULL_POINTER;
@@ -301,14 +337,9 @@ int discpy(int alloc, const struct disprm *dissrc, struct disprm *disdst)
       "naxis must be positive (got %d)", naxis);
   }
 
-  ndp = NDPMAX;
-  NDPMAX = dissrc->ndpmax;
-
-  if ((status = disini(alloc, naxis, disdst))) {
+  if ((status = disinit(alloc, naxis, disdst, dissrc->ndpmax))) {
     return status;
   }
-
-  NDPMAX = ndp;
 
   memcpy(disdst->dtype, dissrc->dtype, naxis*sizeof(char [72]));
 
@@ -331,7 +362,7 @@ int disfree(struct disprm *dis)
   if (dis == 0x0) return DISERR_NULL_POINTER;
 
   if (dis->flag != -1) {
-    /* Optionally allocated by disini() for given parameters. */
+    /* Optionally allocated by disinit() for given parameters. */
     if (dis->m_flag == DISSET) {
       if (dis->dtype  == dis->m_dtype)  dis->dtype  = 0x0;
       if (dis->dp     == dis->m_dp)     dis->dp     = 0x0;
@@ -524,7 +555,7 @@ int disprt(const struct disprm *dis)
   WCSPRINTF_PTR("     disp2x: ", dis->disp2x, "\n");
   for (j = 0; j < naxis; j++) {
     wcsprintf("  disp2x[%d]: %s", j,
-      wcsutil_fptr2str((int (*)(void))dis->disp2x[j], hext));
+      wcsutil_fptr2str((void (*)(void))dis->disp2x[j], hext));
     if (dis->disp2x[j] == dispoly) {
       wcsprintf("  (= dispoly)\n");
     } else if (dis->disp2x[j] == tpd1) {
@@ -552,7 +583,7 @@ int disprt(const struct disprm *dis)
   WCSPRINTF_PTR("     disx2p: ", dis->disx2p, "\n");
   for (j = 0; j < naxis; j++) {
     wcsprintf("  disx2p[%d]: %s\n", j,
-      wcsutil_fptr2str((int (*)(void))dis->disx2p[j], hext));
+      wcsutil_fptr2str((void (*)(void))dis->disx2p[j], hext));
   }
   WCSPRINTF_PTR("     tmpmem: ", dis->tmpmem, "\n");
 
@@ -668,6 +699,10 @@ int disset(struct disprm *dis)
         "No DPja or DQia keywords, NAXES at least is required for each "
         "distortion");
     }
+
+    /* A Clayton's distortion.  Avert compiler warnings about possible use of
+       uninitialized variables. */
+    dpq = 0x0;
   }
 
 
@@ -821,7 +856,7 @@ int disset(struct disprm *dis)
 
     j--;
     if (strncmp(fp, "NAXES", 6) == 0) {
-      Nhat = wcsutil_dpkey_int(keyp);
+      Nhat = dpkeyi(keyp);
       if (Nhat < 0 || naxis < Nhat) {
         return wcserr_set(WCSERR_SET(DISERR_BAD_PARAM),
           "Invalid value of Nhat for %s distortion in %s: %d", dis->dtype[j],
@@ -839,15 +874,15 @@ int disset(struct disprm *dis)
       }
 
       /* N.B. axis numbers in the map are 0-relative. */
-      dis->axmap[j][jhat-1] = wcsutil_dpkey_int(keyp) - 1;
+      dis->axmap[j][jhat-1] = dpkeyi(keyp) - 1;
 
     } else if (strncmp(fp, "OFFSET.", 7) == 0) {
       sscanf(fp+7, "%d", &jhat);
-      dis->offset[j][jhat-1] = wcsutil_dpkey_double(keyp);
+      dis->offset[j][jhat-1] = dpkeyd(keyp);
 
     } else if (strncmp(fp, "SCALE.", 6) == 0) {
       sscanf(fp+6, "%d", &jhat);
-      dis->scale[j][jhat-1] = wcsutil_dpkey_double(keyp);
+      dis->scale[j][jhat-1] = dpkeyd(keyp);
     }
 
     /* DOCORR should also be handled here but no space was provided for it
@@ -1435,9 +1470,9 @@ int polyset(int j, struct disprm *dis)
     fp++;
 
     if (strcmp(fp, "NAUX") == 0) {
-      K = wcsutil_dpkey_int(keyp);
+      K = dpkeyi(keyp);
     } else if (strcmp(fp, "NTERMS") == 0) {
-      M = wcsutil_dpkey_int(keyp);
+      M = dpkeyi(keyp);
     }
   }
 
@@ -1582,7 +1617,7 @@ int polyset(int j, struct disprm *dis)
       }
 
       i = (k-1)*nKparm + offset + jhat;
-      dparm[i] = wcsutil_dpkey_double(keyp);
+      dparm[i] = dpkeyd(keyp);
 
     } else if (strncmp(fp, "TERM.", 5) == 0) {
       /* N.B. m here is 1-relative. */
@@ -1601,7 +1636,7 @@ int polyset(int j, struct disprm *dis)
 
       if (strcmp(fp, "COEFF") == 0) {
         i = iparm[I_DPOLY] + (m-1)*nTparm;
-        dparm[i] = wcsutil_dpkey_double(keyp);
+        dparm[i] = dpkeyd(keyp);
 
       } else if (strncmp(fp, "VAR.", 4) == 0) {
         /* N.B. jhat here is 1-relative. */
@@ -1613,7 +1648,7 @@ int polyset(int j, struct disprm *dis)
         }
 
         i = iparm[I_DPOLY] + (m-1)*nTparm + 1 + (jhat-1);
-        power = wcsutil_dpkey_double(keyp);
+        power = dpkeyd(keyp);
         dparm[i] = power;
 
       } else if (strncmp(fp, "AUX.", 4) == 0) {
@@ -1626,7 +1661,7 @@ int polyset(int j, struct disprm *dis)
         }
 
         i = iparm[I_DPOLY] + (m-1)*nTparm + 1 + Nhat + (k-1);
-        power = wcsutil_dpkey_double(keyp);
+        power = dpkeyd(keyp);
         dparm[i] = power;
 
       } else {
@@ -1729,7 +1764,7 @@ int tpdset(int j, struct disprm *dis)
 {
   static const char *function = "tpdset";
 
-  char   *fp, id[16];
+  char   *fp, id[32];
   int    doaux, docorr, doradial, idis, idp, k, m, ncoeff[2], ndparm, niparm;
   struct dpkey *keyp;
   struct wcserr **err;
@@ -1940,7 +1975,7 @@ int tpdset(int j, struct disprm *dis)
       }
 
       idis = 3*(k-1) + m;
-      dis->dparm[j][idis] = wcsutil_dpkey_double(keyp);
+      dis->dparm[j][idis] = dpkeyd(keyp);
 
     } else if (strncmp(fp, "TPD.", 4) == 0) {
       fp += 4;
@@ -1950,7 +1985,7 @@ int tpdset(int j, struct disprm *dis)
       }
 
       sscanf(fp+4, "%d", &k);
-      dis->dparm[j][idis+k] = wcsutil_dpkey_double(keyp);
+      dis->dparm[j][idis+k] = dpkeyd(keyp);
     }
   }
 
@@ -2163,7 +2198,7 @@ int tpvset(int j, struct disprm *dis)
 {
   static const char *function = "tpvset";
 
-  char   *fp, id[16];
+  char   *fp, id[32];
   int    doradial, idp, k, ndparm, niparm;
   struct dpkey *keyp;
   struct wcserr **err;
@@ -2290,7 +2325,7 @@ int tpvset(int j, struct disprm *dis)
     /* One-to-one correspondence between TPV and TPD coefficients. */
     if (strncmp(fp, "TPV.", 4) == 0) {
       sscanf(fp+4, "%d", &k);
-      dis->dparm[j][k] = wcsutil_dpkey_double(keyp);
+      dis->dparm[j][k] = dpkeyd(keyp);
     }
   }
 
@@ -2315,7 +2350,7 @@ int sipset(int j, struct disprm *dis)
                                 {40, 50, -1, -1, -1, -1, -1, -1, -1, -1},
                                 {49, -1, -1, -1, -1, -1, -1, -1, -1, -1}};
 
-  char   *fp, id[16];
+  char   *fp, id[32];
   int    deg, degree[2], idis, idp, jhat, naxis, ncoeff[2], ndparm, niparm,
          p, q;
   struct dpkey *keyp;
@@ -2470,7 +2505,7 @@ int sipset(int j, struct disprm *dis)
       /* Map to TPD coefficient number. */
       idis += map[p][q];
 
-      dis->dparm[j][idis] = wcsutil_dpkey_double(keyp);
+      dis->dparm[j][idis] = dpkeyd(keyp);
     }
   }
 
@@ -2499,7 +2534,7 @@ int dssset(int j, struct disprm *dis)
 {
   static const char *function = "dssset";
 
-  char   *fp, id[16];
+  char   *fp, id[32];
   int    degree, idp, m, ncoeff, ndparm, niparm;
   double A1, A2, A3, B1, B2, B3, coeff, *dparm, S, X0, Y0;
   struct dpkey *keyp;
@@ -2570,21 +2605,21 @@ int dssset(int j, struct disprm *dis)
 
       if (m == 1) {
         if (keyp->j == 1) {
-          A1 = wcsutil_dpkey_double(keyp);
+          A1 = dpkeyd(keyp);
         } else {
-          B1 = wcsutil_dpkey_double(keyp);
+          B1 = dpkeyd(keyp);
         }
       } else if (m == 2) {
         if (keyp->j == 1) {
-          A2 = wcsutil_dpkey_double(keyp);
+          A2 = dpkeyd(keyp);
         } else {
-          B2 = wcsutil_dpkey_double(keyp);
+          B2 = dpkeyd(keyp);
         }
       } else if (m == 3) {
         if (keyp->j == 1) {
-          A3 = wcsutil_dpkey_double(keyp);
+          A3 = dpkeyd(keyp);
         } else {
-          B3 = wcsutil_dpkey_double(keyp);
+          B3 = dpkeyd(keyp);
         }
       }
     }
@@ -2632,7 +2667,7 @@ int dssset(int j, struct disprm *dis)
 
     if (strncmp(fp, "DSS.AMD.", 8) == 0) {
       /* Skip zero coefficients. */
-      if ((coeff = wcsutil_dpkey_double(keyp)) == 0.0) continue;
+      if ((coeff = dpkeyd(keyp)) == 0.0) continue;
 
       fp += 8;
       sscanf(fp, "%d", &m);
@@ -2717,7 +2752,7 @@ int watset(int j, struct disprm *dis)
                                 {40, 50, -1, -1, -1, -1, -1, -1, -1, -1},
                                 {49, -1, -1, -1, -1, -1, -1, -1, -1, -1}};
 
-  char   *fp, id[16];
+  char   *fp, id[32];
   int    deg, degree, doaux, idis, idp, im, in, *iparm, kind, m, n, ncoeff,
          ndparm, niparm;
   double coeff, coeffm[10], coeffn[10], *dparm, dx, dy, x0, xmax, xmin,
@@ -2766,19 +2801,19 @@ int watset(int j, struct disprm *dis)
         if (degree < deg) degree = deg;
 
       } else if (strcmp(fp, "POLY") == 0) {
-        kind = wcsutil_dpkey_int(keyp);
+        kind = dpkeyi(keyp);
 
       } else if (strcmp(fp, "XMIN") == 0) {
-        xmin = wcsutil_dpkey_double(keyp);
+        xmin = dpkeyd(keyp);
 
       } else if (strcmp(fp, "XMAX") == 0) {
-        xmax = wcsutil_dpkey_double(keyp);
+        xmax = dpkeyd(keyp);
 
       } else if (strcmp(fp, "YMIN") == 0) {
-        ymin = wcsutil_dpkey_double(keyp);
+        ymin = dpkeyd(keyp);
 
       } else if (strcmp(fp, "YMAX") == 0) {
-        ymax = wcsutil_dpkey_double(keyp);
+        ymax = dpkeyd(keyp);
       }
 
     } else if (strcmp(fp, "NAXES")  &&
@@ -2916,12 +2951,12 @@ int watset(int j, struct disprm *dis)
       if (kind == MONOMIAL) {
         /* Monomial coefficient, maps simply to TPD coefficient number. */
         idis = map[m][n];
-        dparm[idis] = wcsutil_dpkey_double(keyp);
+        dparm[idis] = dpkeyd(keyp);
 
       } else {
         /* Coefficient of the product of two Chebyshev or two Legendre */
         /* polynomials.  Find the corresponding monomial coefficients. */
-        coeff = wcsutil_dpkey_double(keyp);
+        coeff = dpkeyd(keyp);
 
         cheleg(kind, m, n, coeffm, coeffn);
         for (im = 0; im <= m; im++) {
@@ -2998,7 +3033,7 @@ int cheleg(int kind, int m, int n, double coeffm[], double coeffn[])
 /*--------------------------------------------------------------------------*/
 
 int dispoly(
-  int inverse,
+  int dummy,
   const int iparm[],
   const double dparm[],
   int Nhat,
@@ -3010,6 +3045,9 @@ int dispoly(
   int    ip, ivar, jhat, k, m;
   const double *cptr, *dpolp, *pptr;
   double *aux, auxp0, *dvarpow, *dpowp, term, var;
+
+  /* Avert nuisance compiler warnings about unused parameters. */
+  (void)dummy;
 
   /* Check for zeroes. */
   for (jhat = 0; jhat < Nhat; jhat++) {
