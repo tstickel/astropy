@@ -16,6 +16,7 @@ from astropy.io import fits
 from astropy.wcs import wcs
 from astropy.wcs import _wcs
 from astropy.utils.data import get_pkg_data_contents, get_pkg_data_fileobj, get_pkg_data_filename
+from astropy.utils.misc import set_locale
 from astropy import units as u
 
 
@@ -265,8 +266,11 @@ def test_ctype_repr():
 def test_ctype_index_error():
     w = _wcs.Wcsprm()
     assert list(w.ctype) == ['', '']
-    with pytest.raises(IndexError):
-        w.ctype[2] = 'FOO'
+    for idx in (2, -3):
+        with pytest.raises(IndexError):
+            w.ctype[idx]
+        with pytest.raises(IndexError):
+            w.ctype[idx] = 'FOO'
 
 
 def test_ctype_invalid_error():
@@ -335,8 +339,11 @@ def test_unit2():
 
 def test_unit3():
     w = wcs.WCS()
-    with pytest.raises(IndexError):
-        w.wcs.cunit[2] = u.m
+    for idx in (2, -3):
+        with pytest.raises(IndexError):
+            w.wcs.cunit[idx]
+        with pytest.raises(IndexError):
+            w.wcs.cunit[idx] = u.m
     with pytest.raises(ValueError):
         w.wcs.cunit = [u.m, u.m, u.m]
 
@@ -837,26 +844,15 @@ def test_header_parse():
 
 
 def test_locale():
-    orig_locale = locale.getlocale(locale.LC_NUMERIC)[0]
-
     try:
-        locale.setlocale(locale.LC_NUMERIC, 'fr_FR')
+        with set_locale('fr_FR'):
+            header = get_pkg_data_contents('data/locale.hdr', encoding='binary')
+            w = _wcs.Wcsprm(header)
+            assert re.search("[0-9]+,[0-9]*", w.to_header()) is None
     except locale.Error:
         pytest.xfail(
             "Can't set to 'fr_FR' locale, perhaps because it is not installed "
             "on this system")
-    try:
-        header = get_pkg_data_contents('data/locale.hdr', encoding='binary')
-        w = _wcs.Wcsprm(header)
-        assert re.search("[0-9]+,[0-9]*", w.to_header()) is None
-    finally:
-        if orig_locale is None:
-            # reset to the default setting
-            locale.resetlocale(locale.LC_NUMERIC)
-        else:
-            # restore to whatever the previous value had been set to for
-            # whatever reason
-            locale.setlocale(locale.LC_NUMERIC, orig_locale)
 
 
 @raises(UnicodeEncodeError)

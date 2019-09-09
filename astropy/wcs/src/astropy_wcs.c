@@ -52,31 +52,12 @@ static int
 Wcs_clear(
     Wcs* self) {
 
-  PyObject* tmp;
-
-  tmp = self->py_det2im[0];
-  self->py_det2im[0] = NULL;
-  Py_XDECREF(tmp);
-
-  tmp = self->py_det2im[1];
-  self->py_det2im[1] = NULL;
-  Py_XDECREF(tmp);
-
-  tmp = self->py_sip;
-  self->py_sip = NULL;
-  Py_XDECREF(tmp);
-
-  tmp = self->py_distortion_lookup[0];
-  self->py_distortion_lookup[0] = NULL;
-  Py_XDECREF(tmp);
-
-  tmp = self->py_distortion_lookup[1];
-  self->py_distortion_lookup[1] = NULL;
-  Py_XDECREF(tmp);
-
-  tmp = self->py_wcsprm;
-  self->py_wcsprm = NULL;
-  Py_XDECREF(tmp);
+  Py_CLEAR(self->py_det2im[0]);
+  Py_CLEAR(self->py_det2im[1]);
+  Py_CLEAR(self->py_sip);
+  Py_CLEAR(self->py_distortion_lookup[0]);
+  Py_CLEAR(self->py_distortion_lookup[1]);
+  Py_CLEAR(self->py_wcsprm);
 
   return 0;
 }
@@ -142,8 +123,9 @@ Wcs_init(
         return -1;
       }
 
-      Py_XDECREF(self->py_det2im[i]);
+      Py_CLEAR(self->py_det2im[i]);
       self->py_det2im[i] = py_det2im[i];
+      Py_INCREF(py_det2im[i]);
       self->x.det2im[i] = &(((PyDistLookup*)py_det2im[i])->x);
     }
   }
@@ -156,8 +138,9 @@ Wcs_init(
       return -1;
     }
 
-    Py_XDECREF(self->py_sip);
+    Py_CLEAR(self->py_sip);
     self->py_sip = py_sip;
+    Py_INCREF(py_sip);
     self->x.sip = &(((PySip*)py_sip)->x);
   }
 
@@ -170,8 +153,9 @@ Wcs_init(
         return -1;
       }
 
-      Py_XDECREF(self->py_distortion_lookup[i]);
+      Py_CLEAR(self->py_distortion_lookup[i]);
       self->py_distortion_lookup[i] = py_distortion_lookup[i];
+      Py_INCREF(py_distortion_lookup[i]);
       self->x.cpdis[i] = &(((PyDistLookup*)py_distortion_lookup[i])->x);
     }
   }
@@ -184,17 +168,11 @@ Wcs_init(
       return -1;
     }
 
-    Py_XDECREF(self->py_wcsprm);
+    Py_CLEAR(self->py_wcsprm);
     self->py_wcsprm = py_wcsprm;
+    Py_INCREF(py_wcsprm);
     self->x.wcs = &(((PyWcsprm*)py_wcsprm)->x);
   }
-
-  Py_XINCREF(self->py_sip);
-  Py_XINCREF(self->py_distortion_lookup[0]);
-  Py_XINCREF(self->py_distortion_lookup[1]);
-  Py_XINCREF(self->py_wcsprm);
-  Py_XINCREF(self->py_det2im[0]);
-  Py_XINCREF(self->py_det2im[1]);
 
   return 0;
 }
@@ -497,8 +475,7 @@ Wcs_set_wcs(
     /*@shared@*/ PyObject* value,
     /*@unused@*/ void* closure) {
 
-  Py_XDECREF(self->py_wcsprm);
-  self->py_wcsprm = NULL;
+  Py_CLEAR(self->py_wcsprm);
   self->x.wcs = NULL;
 
   if (value != NULL && value != Py_None) {
@@ -536,8 +513,7 @@ Wcs_set_cpdis1(
     /*@shared@*/ PyObject* value,
     /*@unused@*/ void* closure) {
 
-  Py_XDECREF(self->py_distortion_lookup[0]);
-  self->py_distortion_lookup[0] = NULL;
+  Py_CLEAR(self->py_distortion_lookup[0]);
   self->x.cpdis[0] = NULL;
 
   if (value != NULL && value != Py_None) {
@@ -575,8 +551,7 @@ Wcs_set_cpdis2(
     /*@shared@*/ PyObject* value,
     /*@unused@*/ void* closure) {
 
-  Py_XDECREF(self->py_distortion_lookup[1]);
-  self->py_distortion_lookup[1] = NULL;
+  Py_CLEAR(self->py_distortion_lookup[1]);
   self->x.cpdis[1] = NULL;
 
   if (value != NULL && value != Py_None) {
@@ -614,8 +589,7 @@ Wcs_set_det2im1(
     /*@shared@*/ PyObject* value,
     /*@unused@*/ void* closure) {
 
-  Py_XDECREF(self->py_det2im[0]);
-  self->py_det2im[0] = NULL;
+  Py_CLEAR(self->py_det2im[0]);
   self->x.det2im[0] = NULL;
 
   if (value != NULL && value != Py_None) {
@@ -653,8 +627,7 @@ Wcs_set_det2im2(
     /*@shared@*/ PyObject* value,
     /*@unused@*/ void* closure) {
 
-  Py_XDECREF(self->py_det2im[1]);
-  self->py_det2im[1] = NULL;
+  Py_CLEAR(self->py_det2im[1]);
   self->x.det2im[1] = NULL;
 
   if (value != NULL && value != Py_None) {
@@ -692,8 +665,7 @@ Wcs_set_sip(
     /*@shared@*/ PyObject* value,
     /*@unused@*/ void* closure) {
 
-  Py_XDECREF(self->py_sip);
-  self->py_sip = NULL;
+  Py_CLEAR(self->py_sip);
   self->x.sip = NULL;
 
   if (value != NULL && value != Py_None) {

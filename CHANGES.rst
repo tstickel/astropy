@@ -35,6 +35,8 @@ astropy.cosmology
 astropy.extern
 ^^^^^^^^^^^^^^
 
+- Remove the bundled ``six`` module. [#8315]
+
 astropy.io.ascii
 ^^^^^^^^^^^^^^^^
 
@@ -45,6 +47,9 @@ astropy.io.misc
 
 astropy.io.fits
 ^^^^^^^^^^^^^^^
+
+- Changed the ``fitscheck`` and ``fitsdiff`` script to use the ``argparse``
+  module instead of ``optparse``. [#9148]
 
 astropy.io.registry
 ^^^^^^^^^^^^^^^^^^^
@@ -58,6 +63,8 @@ astropy.modeling
 - Major rework of modeling internals.
   See modeling documentation for details.
   `<https://docs.astropy.org/en/v4.0/modeling/changes_for_4.html>`_ . [#8769]
+
+- Significant reorganization of the documentation. [#9078, #9171]
 
 - Add Tabular1D.inverse [#9083]
 
@@ -132,10 +139,23 @@ astropy.visualization
   plot and format ``Time`` objects in Matplotlib. [#8782]
 
 - Added support for plotting any WCS compliant with the generalized (APE 14)
-  WCS API with WCSAxes. [#8885]
+  WCS API with WCSAxes. [#8885, #9098]
+
+- Improved display of information when inspecting ``WCSAxes.coords``. [#9098]
+
+- Improved error checking for the ``slices=`` argument to ``WCSAxes``. [#9098]
 
 astropy.wcs
 ^^^^^^^^^^^
+
+- Updated wcslib to v6.4. [#9125]
+
+- Improved the  ``SlicedLowLevelWCS`` class in ``astropy.wcs.wcsapi`` to avoid
+  storing chains of nested ``SlicedLowLevelWCS`` objects when applying multiple
+  slicing operations in turn. [#9210]
+
+- Added a ``wcs_info_str`` function to ``astropy.wcs.wcsapi`` to show a summary
+  of an APE-14-compliant WCS as a string. [#8546, #9207]
 
 API Changes
 -----------
@@ -255,6 +275,10 @@ astropy.table
   methods.  Now it is possible add any object(s) which can be converted or broadcasted
   to a valid column for the table.  ``Table.__setitem__`` now just calls
   ``add_column``.
+
+- Changed default table configuration setting ``replace_warnings`` from
+  ``['slice']`` to ``[]``.  This removes the default warning when replacing
+  a table column that is a slice of another column. [#9144]
 
 astropy.tests
 ^^^^^^^^^^^^^
@@ -451,6 +475,10 @@ bounding box. [#8799]
 astropy.nddata
 ^^^^^^^^^^^^^^
 
+- Fix to ``add_array``, which now accepts ``array_small`` having dimensions
+  equal to ``array_large``, instead of only allowing smaller sizes of
+  arrays. [#9118]
+
 astropy.samp
 ^^^^^^^^^^^^
 
@@ -495,7 +523,15 @@ astropy.visualization
 astropy.wcs
 ^^^^^^^^^^^
 
+- Fixed equality test between ``cunit`` where the first element was equal but
+  the following elements differed. [#9154]
+
 - Fixed a crash while loading a WCS from headers containing duplicate SIP keywords. [#8893]
+
+- Fixed a possible buffer overflow when using too large negative indices for
+  ``cunit`` or ``ctype`` [#9151]
+
+- Fixed reference counting in ``WCSBase.__init__`` [#9166]
 
 
 Other Changes and Additions
@@ -2534,7 +2570,9 @@ astropy.wcs
 Other Changes and Additions
 ---------------------------
 
-
+- Updated required version of Cython to v0.29.13 to make sure that
+  generated C files are compatible with the upcoming Python 3.8 release
+  as well as earlier supported versions of Python. [#9198]
 
 2.0.14 (2019-06-14)
 ===================

@@ -55,22 +55,8 @@ PyUnitListProxy_traverse(
     visitproc visit,
     void *arg) {
 
-  int vret;
-
-  if (self->pyobject) {
-    vret = visit(self->pyobject, arg);
-    if (vret != 0) {
-      return vret;
-    }
-  }
-
-  if (self->unit_class) {
-    vret = visit(self->unit_class, arg);
-    if (vret != 0) {
-      return vret;
-    }
-  }
-
+  Py_VISIT(self->pyobject);
+  Py_VISIT(self->unit_class);
   return 0;
 }
 
@@ -78,15 +64,8 @@ static int
 PyUnitListProxy_clear(
     PyUnitListProxy *self) {
 
-  PyObject *tmp;
-
-  tmp = self->pyobject;
-  self->pyobject = NULL;
-  Py_XDECREF(tmp);
-
-  tmp = self->unit_class;
-  self->unit_class = NULL;
-  Py_XDECREF(tmp);
+  Py_CLEAR(self->pyobject);
+  Py_CLEAR(self->unit_class);
 
   return 0;
 }
@@ -156,6 +135,10 @@ _get_unit(
   }
 
   args = PyTuple_New(1);
+  if (args == NULL) {
+      Py_DECREF(kw);
+      return NULL;
+  }
   PyTuple_SetItem(args, 0, unit);
   Py_INCREF(unit);
 
@@ -174,7 +157,7 @@ PyUnitListProxy_getitem(
   PyObject *value;
   PyObject *result;
 
-  if (index >= self->size) {
+  if (index >= self->size || index < 0) {
     PyErr_SetString(PyExc_IndexError, "index out of range");
     return NULL;
   }
@@ -193,6 +176,8 @@ PyUnitListProxy_richcmp(
 	PyObject *b,
 	int op){
   PyUnitListProxy *lhs, *rhs;
+  Py_ssize_t idx;
+  int equal = 1;
   assert(a != NULL && b != NULL);
   if (!PyObject_TypeCheck(a, &PyUnitListProxyType) ||
       !PyObject_TypeCheck(b, &PyUnitListProxyType)) {
@@ -201,18 +186,24 @@ PyUnitListProxy_richcmp(
   if (op != Py_EQ && op != Py_NE) {
     Py_RETURN_NOTIMPLEMENTED;
   }
+
+  /* The actual comparison of the two objects. unit_class is ignored because
+   * it's not an essential property of the instances.
+   */
   lhs = (PyUnitListProxy *)a;
   rhs = (PyUnitListProxy *)b;
-  int equal = PyObject_RichCompareBool(lhs->unit_class, rhs->unit_class, Py_EQ);
-  if (equal == -1) {
-    return NULL;  // Exception will be set because the rich-compare failed
+  if (lhs->size != rhs->size) {
+    equal = 0;
   }
-  equal = equal == 1 && !strncmp(lhs->array, rhs->array, ARRAYSIZE) && lhs->size == rhs->size;
+  for (idx = 0; idx < lhs->size && equal == 1; idx++) {
+    if (strncmp(lhs->array[idx], rhs->array[idx], ARRAYSIZE) != 0) {
+      equal = 0;
+    }
+  }
   if ((op == Py_EQ && equal == 1) ||
       (op == Py_NE && equal == 0)) {
     Py_RETURN_TRUE;
-  } 
-  else {
+  } else {
     Py_RETURN_FALSE;
   }
 }
@@ -227,7 +218,7 @@ PyUnitListProxy_setitem(
   PyObject* unicode_value;
   PyObject* bytes_value;
 
-  if (index >= self->size) {
+  if (index >= self->size || index < 0) {
     PyErr_SetString(PyExc_IndexError, "index out of range");
     return -1;
   }

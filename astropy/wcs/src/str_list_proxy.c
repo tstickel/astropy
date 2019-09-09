@@ -50,15 +50,7 @@ PyStrListProxy_traverse(
     visitproc visit,
     void *arg) {
 
-  int vret;
-
-  if (self->pyobject) {
-    vret = visit(self->pyobject, arg);
-    if (vret != 0) {
-      return vret;
-    }
-  }
-
+  Py_VISIT(self->pyobject);
   return 0;
 }
 
@@ -66,11 +58,7 @@ static int
 PyStrListProxy_clear(
     PyStrListProxy *self) {
 
-  PyObject *tmp;
-
-  tmp = self->pyobject;
-  self->pyobject = NULL;
-  Py_XDECREF(tmp);
+  Py_CLEAR(self->pyobject);
 
   return 0;
 }
@@ -113,7 +101,7 @@ PyStrListProxy_getitem(
     PyStrListProxy* self,
     Py_ssize_t index) {
 
-  if (index >= self->size) {
+  if (index >= self->size || index < 0) {
     PyErr_SetString(PyExc_IndexError, "index out of range");
     return NULL;
   }
@@ -127,7 +115,7 @@ PyStrListProxy_setitem(
     Py_ssize_t index,
     PyObject* arg) {
 
-  if (index >= self->size) {
+  if (index >= self->size || index < 0) {
     PyErr_SetString(PyExc_IndexError, "index out of range");
     return -1;
   }
